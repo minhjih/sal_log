@@ -1,0 +1,39 @@
+# XcodeGen 프로젝트 정의 — `xcodegen generate` 실행 시 SalLog.xcodeproj 생성
+name: SalLog
+options:
+  bundleIdPrefix: app.sallog
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.4"
+
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: 2.24.0
+
+targets:
+  SalLog:
+    type: application
+    platform: iOS
+    sources:
+      - SalLog/Sources
+    dependencies:
+      - package: Supabase
+        product: Supabase
+    info:
+      path: SalLog/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: sal—log
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        NSCameraUsageDescription: 브이로그 클립을 촬영하기 위해 카메라를 사용해요.
+        NSMicrophoneUsageDescription: 클립에 소리를 담기 위해 마이크를 사용해요.
+        NSPhotoLibraryAddUsageDescription: 완성된 브이로그 영상을 사진 앨범에 저장해요.
+        NSPhotoLibraryUsageDescription: 영상·인바디 검사지 사진을 불러오기 위해 앨범에 접근해요.
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [app.sallog]
+    entitlements:
+      path: SalLog/Resources/SalLog.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
