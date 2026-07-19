@@ -1,5 +1,8 @@
 import Foundation
 import Supabase
+import PostgREST
+import Storage
+import Realtime
 
 /// 클립 + 식사/운동 로그 CRUD, 영상 업로드, signed URL 캐시, 실시간 구독
 enum ClipService {

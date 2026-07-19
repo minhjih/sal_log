@@ -1,5 +1,6 @@
 import SwiftUI
 import AuthenticationServices
+import Auth
 
 /// 웰컴 → 로그인/회원가입 (이메일·Apple·Google·Kakao)
 struct AuthFlowView: View {

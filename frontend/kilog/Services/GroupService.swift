@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import PostgREST
 
 /// 그룹·초대·공유 설정 — 다중 행 변경은 전부 서버 RPC(security definer)로 수행
 enum GroupService {
