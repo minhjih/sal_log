@@ -1,6 +1,9 @@
 import Foundation
 import SwiftUI
 import Supabase
+import Combine
+import Auth
+import Realtime
 
 /// 앱 전역 상태: 세션 → 그룹 → 오늘 피드
 @MainActor

@@ -1,4 +1,7 @@
 import Foundation
+import Combine
+import Supabase
+import PostgREST
 
 /// 운동/음식 카탈로그.
 /// 서버 exercise_catalog / food_catalog에서 로드하고, 네트워크 이전·실패 시

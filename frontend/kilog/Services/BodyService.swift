@@ -1,5 +1,7 @@
 import Foundation
 import Supabase
+import PostgREST
+import Storage
 
 /// 신체 프로필·인바디 측정 기록
 enum BodyService {
