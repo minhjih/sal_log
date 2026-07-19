@@ -8,7 +8,7 @@ React 프로토타입(`sal-log-v8-auth-groups.jsx`)을 기반으로 **백엔드(
 ```
 sal_log/
 ├── backend/    Supabase — Postgres 스키마·RLS·RPC·Storage·Realtime (SQL 마이그레이션)
-├── frontend/   SwiftUI iOS 앱 (XcodeGen 프로젝트, Supabase Swift SDK)
+├── frontend/   SwiftUI iOS 앱 — kilog Xcode 프로젝트에 바로 붙여넣는 구조 (Supabase Swift SDK)
 └── sal-log-v8-auth-groups.jsx   원본 React 프로토타입 (참고용)
 ```
 

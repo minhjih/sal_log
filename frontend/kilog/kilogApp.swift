@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct SalLogApp: App {
+struct kilogApp: App {
     @StateObject private var app = AppState()
 
     var body: some Scene {
