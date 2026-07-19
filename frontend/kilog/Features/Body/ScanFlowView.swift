@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import UIKit
+import Foundation
 
 /// 인바디 검사지 스캔 → OCR → 확인/수정 → 저장
 /// firstTime = 온보딩(신체 정보 최초 입력, 성별·나이·키 포함)

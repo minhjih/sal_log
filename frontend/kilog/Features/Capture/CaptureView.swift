@@ -1,6 +1,9 @@
 import SwiftUI
 import AVKit
 import PhotosUI
+import AVFoundation
+import UIKit
+import Foundation
 
 /// 촬영 → 메타(캡션·시간·태그) → 저장 플로우
 struct CaptureView: View {

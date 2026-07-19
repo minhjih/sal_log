@@ -1,6 +1,9 @@
 import SwiftUI
 import AVKit
 import Combine
+import AVFoundation
+import UIKit
+import Foundation
 
 /// 위(나)/아래(파트너) 두 줄로 하루를 연속 재생하는 플레이어 — JSX theater 이식
 @MainActor

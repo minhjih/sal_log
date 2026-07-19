@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 /// 오늘 탭: 연속 브이로그 + 지금 찍기 + 멤버별 수지 카드
 struct TodayView: View {

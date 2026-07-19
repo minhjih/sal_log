@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 /// 그룹 연결: 새 그룹 만들기 / 초대 코드로 참여 (실제 서버 RPC 사용)
 struct GroupSetupView: View {

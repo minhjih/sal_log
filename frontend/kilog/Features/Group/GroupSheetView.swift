@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import Foundation
 
 /// 그룹 관리 시트: 멤버 목록 · 초대 토큰 발급/공유 · 그룹 확장 · 내 공유 설정
 struct GroupSheetView: View {

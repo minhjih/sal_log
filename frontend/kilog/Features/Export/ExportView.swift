@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import AVFoundation
+import Foundation
 
 /// 내보내기 화면: 클립 다운로드 → 합성 → 미리보기 → 공유/저장
 struct ExportView: View {

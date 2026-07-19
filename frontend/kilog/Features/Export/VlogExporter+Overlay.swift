@@ -1,5 +1,7 @@
 import UIKit
 import AVFoundation
+import SwiftUI
+import Foundation
 
 // 오버레이(인트로·세그먼트 HUD·아웃트로·진행바) CALayer 구성
 extension VlogExporter {

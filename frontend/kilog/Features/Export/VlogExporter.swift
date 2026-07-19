@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import UIKit
+import SwiftUI
 
 /// 하루의 클립들을 16:9(960×540) 한 편의 브이로그로 합성.
 /// JSX의 canvas + MediaRecorder 내보내기를 AVFoundation으로 재구현:

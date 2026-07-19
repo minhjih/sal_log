@@ -1,6 +1,7 @@
 import AVFoundation
 import UIKit
 import Combine
+import Foundation
 
 /// 전면 카메라 6초 클립 녹화 — AVCaptureSession + MovieFileOutput
 @MainActor
