@@ -3,6 +3,7 @@ import Supabase
 import AuthenticationServices
 import CryptoKit
 import Auth
+import Security
 
 /// Supabase Auth 래퍼 — 이메일/비밀번호, Apple, Google·Kakao(OAuth)
 enum AuthService {

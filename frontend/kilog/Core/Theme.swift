@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 /// sal-log 다크 팔레트 (JSX 디자인 시스템 이식)
 enum Theme {

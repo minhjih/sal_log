@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import Foundation
 
 /// 바디 탭: 멤버별 체중·골격근량·체지방률 추이 (Swift Charts)
 struct BodyView: View {
