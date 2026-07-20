@@ -3,51 +3,30 @@ import AVFoundation
 import UIKit
 import SwiftUI
 
-/// 하루의 클립들을 한 편의 브이로그로 합성.
-/// JSX의 canvas + MediaRecorder 내보내기를 AVFoundation으로 재구현:
-///  · 인트로(1.4s) → 세그먼트(위/아래 두 줄 분할) → 아웃트로(2.2s)
+/// 하루의 클립들을 인스타 스토리용 세로(9:16) 브이로그 한 편으로 합성.
+///
+///  · 캔버스: 1080×1920 (스토리 규격)
+///  · 콘텐츠: 앱 오늘 탭에 보이는 그대로의 4:5(1080×1350) 두 줄 분할을
+///    세로 중앙에 배치 — 늘리거나 자르지 않고 위아래는 검은색 레터박스
+///  · 인트로(1.4s) → 세그먼트 → 아웃트로(2.2s)
 ///  · 실제 영상은 AVMutableComposition 트랙에 배치하고 transform/crop으로 줄에 맞춤
 ///  · 텍스트/그라데이션/칩 오버레이는 CoreAnimationTool의 CALayer로 렌더
-///  · 화면비 3종: 앱 화면 그대로(4:5) · 인스타 스토리(9:16) · 가로(16:9)
 final class VlogExporter {
 
-    enum ExportFormat: String, CaseIterable, Identifiable {
-        case screen    // 4:5 — 앱 오늘 탭에 보이는 그대로
-        case story     // 9:16 — 인스타그램 스토리/릴스
-        case landscape // 16:9 — 가로 브이로그
-
-        var id: String { rawValue }
-
-        var size: CGSize {
-            switch self {
-            case .screen:    return CGSize(width: 1080, height: 1350)
-            case .story:     return CGSize(width: 1080, height: 1920)
-            case .landscape: return CGSize(width: 1920, height: 1080)
-            }
-        }
-
-        var label: String {
-            switch self {
-            case .screen:    return "4:5 화면 그대로"
-            case .story:     return "9:16 스토리"
-            case .landscape: return "16:9 가로"
-            }
-        }
-
-        var aspect: CGFloat { size.width / size.height }
-    }
+    /// 스토리 캔버스 (9:16)
+    static let canvasSize = CGSize(width: 1080, height: 1920)
+    /// 실제 콘텐츠 영역 — 앱 화면과 동일한 4:5
+    static let contentSize = CGSize(width: 1080, height: 1350)
 
     static let introSec = 1.4
     static let outroSec = 2.2
 
-    let format: ExportFormat
-    var size: CGSize { format.size }
+    var size: CGSize { Self.canvasSize }
+    /// 콘텐츠(4:5) 블록의 세로 시작 위치 (위아래 레터박스 여백)
+    var contentTop: CGFloat { (size.height - Self.contentSize.height) / 2 }
+    var stripHeight: CGFloat { Self.contentSize.height / 2 }
     /// 레이아웃 상수 스케일 (기준 폭 960의 배수)
-    var fs: CGFloat { size.width / 960 }
-
-    init(format: ExportFormat = .screen) {
-        self.format = format
-    }
+    var fs: CGFloat { Self.contentSize.width / 960 }
 
     struct Row {
         let member: MemberOverview
@@ -87,8 +66,13 @@ final class VlogExporter {
         var bounds: [Double] = [Self.introSec]
         for d in segDurations { bounds.append(bounds.last! + d) }
 
-        // 1) 베이스(배경) 트랙 — 전체 길이를 덮는 무지 배경 영상
-        let baseURL = try await Self.makeBackgroundVideo(duration: totalSec, size: size)
+        // 1) 베이스(배경) 트랙 — 검은 레터박스 + 콘텐츠 영역 배경색
+        let baseURL = try await Self.makeBackgroundVideo(
+            duration: totalSec, size: size,
+            contentRect: CGRect(x: 0, y: contentTop,
+                                width: Self.contentSize.width,
+                                height: Self.contentSize.height)
+        )
         let composition = AVMutableComposition()
         let baseAsset = AVURLAsset(url: baseURL)
         guard
@@ -100,10 +84,9 @@ final class VlogExporter {
                                     duration: CMTime(seconds: totalSec, preferredTimescale: 600))
         try baseTrack.insertTimeRange(baseRange, of: baseVideoTrack, at: .zero)
 
-        // 2) 위/아래 줄 트랙에 클립 배치
-        let stripHeight = size.height / 2
-        let rows: [(row: Row, y: CGFloat)] = [(input.topRow, 0)]
-            + (input.bottomRow.map { [($0, stripHeight)] } ?? [])
+        // 2) 콘텐츠 영역 안에 위/아래 줄 트랙 배치
+        let rows: [(row: Row, y: CGFloat)] = [(input.topRow, contentTop)]
+            + (input.bottomRow.map { [($0, contentTop + stripHeight)] } ?? [])
 
         var rowTracks: [Int: AVMutableCompositionTrack] = [:]
         for (i, _) in rows.enumerated() {
@@ -198,7 +181,7 @@ final class VlogExporter {
             postProcessingAsVideoLayer: videoLayer, in: parentLayer
         )
 
-        // 5) 내보내기 — renderSize(선택한 화면비)를 그대로 살리기 위해 HighestQuality
+        // 5) 내보내기 — renderSize(1080×1920)를 그대로 살리기 위해 HighestQuality
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("kilog-\(UUID().uuidString).mp4")
         guard let session = AVAssetExportSession(
@@ -259,7 +242,10 @@ final class VlogExporter {
     }
 
     // ── 배경(무지) 영상 생성 ──────────────────────────────
-    static func makeBackgroundVideo(duration: Double, size: CGSize) async throws -> URL {
+    /// 캔버스 전체는 검은색(레터박스), 콘텐츠 영역만 앱 배경색으로 채운다.
+    static func makeBackgroundVideo(
+        duration: Double, size: CGSize, contentRect: CGRect
+    ) async throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("bg-\(UUID().uuidString).mp4")
 
@@ -297,8 +283,16 @@ final class VlogExporter {
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                 | CGBitmapInfo.byteOrder32Little.rawValue
         ) {
-            ctx.setFillColor(UIColor(Theme.bg).cgColor)
+            ctx.setFillColor(UIColor.black.cgColor)
             ctx.fill(CGRect(origin: .zero, size: size))
+            // CGContext는 좌하단 원점이라 y 반전
+            let flipped = CGRect(
+                x: contentRect.minX,
+                y: size.height - contentRect.maxY,
+                width: contentRect.width, height: contentRect.height
+            )
+            ctx.setFillColor(UIColor(Theme.bg).cgColor)
+            ctx.fill(flipped)
         }
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
 

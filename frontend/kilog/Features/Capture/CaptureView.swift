@@ -36,6 +36,11 @@ struct CaptureView: View {
 
     @State private var isLandscape = UIDevice.current.orientation.isLandscape
 
+    // 목록에 없는 음식 직접 입력
+    @State private var useCustomFood = false
+    @State private var customFoodName = ""
+    @State private var customFoodKcal: Int?
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -262,10 +267,57 @@ struct CaptureView: View {
     }
 
     private var foodPicker: some View {
-        FlowChips(items: catalogs.foods, isOn: { $0.id == selectedFood?.id }) { item in
-            selectedFood = item
-        } label: { item in
-            (item.name, "+\(item.kcal)")
+        VStack(spacing: 10) {
+            FlowChips(items: catalogs.foods,
+                      isOn: { $0.id == selectedFood?.id && !useCustomFood }) { item in
+                selectedFood = item
+                useCustomFood = false
+            } label: { item in
+                (item.name, "+\(item.kcal)")
+            }
+
+            // 목록에 없는 음식: 직접 입력
+            Button {
+                useCustomFood.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: useCustomFood ? "checkmark" : "plus")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("목록에 없어요 — 직접 입력")
+                        .font(.system(size: 13, weight: useCustomFood ? .semibold : .regular))
+                }
+                .foregroundStyle(useCustomFood ? Theme.text : Theme.muted)
+                .padding(.horizontal, 13).padding(.vertical, 7)
+                .background(useCustomFood ? Theme.surface2 : Theme.surface)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(useCustomFood ? Theme.text : Theme.line))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if useCustomFood {
+                HStack(spacing: 8) {
+                    TextField("음식 이름 (예: 엄마 김치찌개)", text: $customFoodName)
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+
+                    HStack(spacing: 4) {
+                        TextField("kcal", value: $customFoodKcal, format: .number)
+                            .keyboardType(.numberPad)
+                            .frame(width: 56)
+                        Text("kcal").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+                }
+                Text("칼로리를 모르면 대략으로 적어도 돼요. 한 끼 보통 500~800kcal 정도예요.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.faint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -319,7 +371,17 @@ struct CaptureView: View {
         switch tagMode {
         case .none: tag = nil
         case .food:
-            if let f = selectedFood { tag = .food(name: f.name, kcal: f.kcal) }
+            if useCustomFood {
+                let name = customFoodName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty, let kcal = customFoodKcal, (0...5000).contains(kcal) else {
+                    error = "직접 입력한 음식의 이름과 칼로리(0~5000)를 확인해 주세요."
+                    saving = false
+                    return
+                }
+                tag = .food(name: String(name.prefix(20)), kcal: kcal)
+            } else if let f = selectedFood {
+                tag = .food(name: f.name, kcal: f.kcal)
+            }
         case .move:
             if let m = selectedMove {
                 let kcal = HealthMath.metKcal(met: m.met,

@@ -15,24 +15,25 @@ extension VlogExporter {
         totalSec: Double,
         rows: [Row]
     ) -> CALayer {
-        let W = size.width, H = size.height
+        let W = size.width
         let overlay = CALayer()
         overlay.frame = CGRect(origin: .zero, size: size)
         overlay.isGeometryFlipped = true   // 캔버스처럼 좌상단 원점으로
 
         let outroStart = bounds.last ?? Self.introSec
-        let stripH = H / 2
+        let stripH = stripHeight
+        let top = contentTop   // 콘텐츠(4:5) 블록 시작 — 위아래는 검은 레터박스
 
         // ── 세그먼트 공통: 중앙 이음선 + 줄 하단 그라데이션 + 이름 ──
         let seam = Self.gradientLayer(
             colors: [UIColor(Theme.me), UIColor(Theme.lover)],
-            frame: CGRect(x: 0, y: stripH - 1.5 * fs, width: W, height: 3 * fs)
+            frame: CGRect(x: 0, y: top + stripH - 1.5 * fs, width: W, height: 3 * fs)
         )
         window(seam, from: Self.introSec, to: outroStart, total: totalSec)
         overlay.addSublayer(seam)
 
         for (rowIndex, row) in rows.enumerated() {
-            let stripBottom = CGFloat(rowIndex + 1) * stripH
+            let stripBottom = top + CGFloat(rowIndex + 1) * stripH
             let shade = Self.gradientLayer(
                 colors: [UIColor.black.withAlphaComponent(0),
                          UIColor.black.withAlphaComponent(0.6)],
@@ -59,9 +60,9 @@ extension VlogExporter {
             let segStart = bounds[si]
             let segEnd = bounds[si + 1]
 
-            // 시간 칩 (상단 중앙)
+            // 시간 칩 (콘텐츠 영역 상단 중앙)
             let chipBG = CALayer()
-            chipBG.frame = CGRect(x: W / 2 - 54 * fs, y: 24 * fs,
+            chipBG.frame = CGRect(x: W / 2 - 54 * fs, y: top + 24 * fs,
                                   width: 108 * fs, height: 40 * fs)
             chipBG.backgroundColor = UIColor.black.withAlphaComponent(0.45).cgColor
             chipBG.cornerRadius = 20 * fs
@@ -70,13 +71,13 @@ extension VlogExporter {
 
             let chipText = Self.textLayer(segment.timeLabel, size: 22 * fs, weight: .semibold,
                                           color: .white, alignment: .center)
-            chipText.frame = CGRect(x: W / 2 - 54 * fs, y: 31 * fs,
+            chipText.frame = CGRect(x: W / 2 - 54 * fs, y: top + 31 * fs,
                                     width: 108 * fs, height: 28 * fs)
             window(chipText, from: segStart, to: segEnd, total: totalSec)
             overlay.addSublayer(chipText)
 
             for (rowIndex, row) in rows.enumerated() {
-                let stripTop = CGFloat(rowIndex) * stripH
+                let stripTop = top + CGFloat(rowIndex) * stripH
                 let stripBottom = stripTop + stripH
                 guard let clip = segment.clips[row.member.userId] else { continue }
 
@@ -226,11 +227,11 @@ extension VlogExporter {
         return layer
     }
 
-    // ── 진행 바 ───────────────────────────────────────────
+    // ── 진행 바 (콘텐츠 영역 상단) ────────────────────────
     private func progressLayer(bounds: [Double], total: Double) -> CALayer {
         let W = size.width
         let container = CALayer()
-        container.frame = CGRect(x: 0, y: 0, width: W, height: 24 * fs)
+        container.frame = CGRect(x: 0, y: contentTop, width: W, height: 24 * fs)
 
         let n = bounds.count - 1
         let gap: CGFloat = 5 * fs

@@ -16,36 +16,17 @@ struct ExportView: View {
     }
     @State private var stage: Stage = .preparing
     @State private var player: AVPlayer?
-    @State private var format: VlogExporter.ExportFormat = .screen
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 12) {
-                // 화면비 선택 — 바꾸면 다시 합성
-                HStack(spacing: 6) {
-                    ForEach(VlogExporter.ExportFormat.allCases) { f in
-                        Button {
-                            guard format != f else { return }
-                            format = f
-                            player?.pause()
-                            Task { await run() }
-                        } label: {
-                            Text(f.label)
-                                .font(.system(size: 12, weight: format == f ? .bold : .medium))
-                                .foregroundStyle(format == f ? Theme.text : Theme.muted)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 9)
-                                .background(format == f ? Theme.surface2 : Theme.surface)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10)
-                                    .stroke(format == f ? Theme.lover : Theme.line))
-                        }
-                    }
-                }
+                Text("인스타 스토리 규격(9:16) · 화면 그대로 + 검은 여백")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
 
-                // 미리보기 캔버스 (선택한 화면비)
+                // 미리보기 캔버스 (9:16)
                 ZStack {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Theme.bg)
@@ -80,8 +61,8 @@ struct ExportView: View {
                             .padding()
                     }
                 }
-                .aspectRatio(format.aspect, contentMode: .fit)
-                .frame(maxHeight: 480)
+                .aspectRatio(9 / 16, contentMode: .fit)
+                .frame(maxHeight: 520)
 
                 // 하단 바
                 HStack(spacing: 8) {
@@ -181,7 +162,7 @@ struct ExportView: View {
                 dateLabel: dateFormatter.string(from: Date())
             )
 
-            let output = try await VlogExporter(format: format).export(input) { p in
+            let output = try await VlogExporter().export(input) { p in
                 Task { @MainActor in
                     if case .rendering = stage { stage = .rendering(p) }
                 }
