@@ -76,6 +76,8 @@ final class AppState: ObservableObject {
 
     func refreshBootstrap() async {
         do {
+            // 카탈로그는 RLS가 로그인 전용이라 인증 후에 로드해야 전체가 내려옴
+            await catalogs.load()
             let boot = try await GroupService.bootstrap()
             me = boot.user
             myProfile = boot.profile

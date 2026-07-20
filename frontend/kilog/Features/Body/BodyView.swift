@@ -11,10 +11,10 @@ struct BodyView: View {
         ScrollView {
             VStack(spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(app.group?.type == .couple ? "커플 바디" : "그룹 바디")
+                    Text("바디")
                         .font(.system(size: 19, weight: .bold))
                     Spacer()
-                    Text("서로의 변화를 함께 확인해요")
+                    Text("인바디 흐름 모아보기")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.muted)
                 }

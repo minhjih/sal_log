@@ -190,7 +190,7 @@ struct GroupSheetView: View {
             toggle("체지방률", $mySharing.shareBodyFat)
             toggle("식사 기록", $mySharing.shareFood)
             toggle("운동 기록", $mySharing.shareWorkout)
-            toggle("칼로리 수지", $mySharing.shareCalorieBalance)
+            toggle("칼로리 밸런스", $mySharing.shareCalorieBalance)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
