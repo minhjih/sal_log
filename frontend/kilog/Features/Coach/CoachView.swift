@@ -112,7 +112,7 @@ struct MemberCoachPanel: View {
                             .font(.system(size: 12, weight: .heavy))
                             .foregroundStyle(Color(hex: "#101016")))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(member.nickname)의 코치")
+                        Text("\(member.displayName)의 코치")
                             .font(.system(size: 14, weight: .semibold))
                         Text(balanceLabel)
                             .font(.system(size: 10.5))

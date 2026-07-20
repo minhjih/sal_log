@@ -16,7 +16,17 @@ final class CameraModel: NSObject, ObservableObject {
     private var timer: Timer?
     private let sessionQueue = DispatchQueue(label: "kilog.camera")
 
+    /// Info.plist에 권한 문구가 없는 상태로 장치에 접근하면 iOS가 앱을 즉시
+    /// 종료시키므로(TCC 크래시), 문구 존재 여부를 먼저 확인한다.
+    private static func hasUsageDescription(_ key: String) -> Bool {
+        (Bundle.main.object(forInfoDictionaryKey: key) as? String)?.isEmpty == false
+    }
+
     func configure() async {
+        guard Self.hasUsageDescription("NSCameraUsageDescription") else {
+            assertionFailure("Info.plist에 NSCameraUsageDescription이 없습니다 — 카메라 접근 시 크래시 방지를 위해 비활성화")
+            isAuthorized = false; return
+        }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             break
@@ -44,7 +54,10 @@ final class CameraModel: NSObject, ObservableObject {
             }
             session.addInput(videoInput)
 
-            if let mic = AVCaptureDevice.default(for: .audio),
+            // 마이크는 권한 문구가 있을 때만 붙인다 — 없으면 무음 녹화로 진행
+            // (NSMicrophoneUsageDescription 누락 시 여기서 TCC 크래시가 났었음)
+            if Self.hasUsageDescription("NSMicrophoneUsageDescription"),
+               let mic = AVCaptureDevice.default(for: .audio),
                let audioInput = try? AVCaptureDeviceInput(device: mic),
                session.canAddInput(audioInput) {
                 session.addInput(audioInput)

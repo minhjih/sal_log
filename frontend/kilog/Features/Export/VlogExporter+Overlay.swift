@@ -39,7 +39,7 @@ extension VlogExporter {
 
             // 이름 (좌하단, 항상 표시)
             let row = rows[rowIndex]
-            let name = textLayer(row.member.nickname, size: 17, weight: .bold,
+            let name = textLayer(row.member.displayName, size: 17, weight: .bold,
                                  color: UIColor(Color(hex: row.member.colorHex)),
                                  alignment: .left)
             name.frame = CGRect(x: 26, y: stripBottom - 40, width: 300, height: 24)
@@ -165,7 +165,7 @@ extension VlogExporter {
             card.cornerRadius = 22
             layer.addSublayer(card)
 
-            let name = textLayer(row.member.nickname, size: 22, weight: .semibold,
+            let name = textLayer(row.member.displayName, size: 22, weight: .semibold,
                                  color: UIColor(Color(hex: row.member.colorHex)),
                                  alignment: .center)
             name.frame = CGRect(x: centerX - 110, y: 186, width: 220, height: 28)

@@ -17,7 +17,7 @@ enum BodyService {
     ) async throws -> BodyMeasurement {
         // 검사지 원본 보관 (본인 전용 버킷)
         if let data = scanImageData {
-            let key = "\(userId.uuidString)/\(UUID().uuidString).jpg"
+            let key = "\(userId.uuidString.lowercased())/\(UUID().uuidString.lowercased()).jpg"
             try? await Supa.client.storage.from("inbody").upload(
                 key, data: data,
                 options: FileOptions(contentType: "image/jpeg")

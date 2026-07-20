@@ -201,12 +201,27 @@ struct AuthFlowView: View {
     }
 
     private func handleApple(_ result: Result<ASAuthorization, Error>) async {
-        guard
-            case .success(let auth) = result,
-            let credential = auth.credential as? ASAuthorizationAppleIDCredential
-        else { return }
-        await tryAuth {
-            try await AuthService.signInWithApple(credential: credential, nonce: appleNonce)
+        switch result {
+        case .success(let auth):
+            guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
+                error = "Apple 인증 정보를 읽지 못했어요. 다시 시도해 주세요."
+                return
+            }
+            await tryAuth {
+                try await AuthService.signInWithApple(credential: credential, nonce: appleNonce)
+            }
+        case .failure(let err):
+            // 사용자가 시트를 직접 닫은 경우는 조용히 무시
+            if let authError = err as? ASAuthorizationError, authError.code == .canceled {
+                return
+            }
+            let ns = err as NSError
+            if ns.code == 1000 {
+                // AuthorizationError.unknown — 대부분 entitlement/계정 문제
+                error = "Apple 로그인을 시작하지 못했어요. Xcode의 Sign in with Apple capability와 기기의 Apple ID 로그인 상태를 확인해 주세요."
+            } else {
+                error = "Apple 로그인 실패: \(err.localizedDescription)"
+            }
         }
     }
 
@@ -218,11 +233,17 @@ struct AuthFlowView: View {
             error = nil
             // authStateChanges 스트림이 phase 전환을 담당
         } catch {
-            self.error = friendlyMessage(error)
+            let message = friendlyMessage(error)
+            self.error = message.isEmpty ? nil : message
         }
     }
 
     private func friendlyMessage(_ error: Error) -> String {
+        // 사용자가 OAuth 시트를 직접 닫은 경우
+        if let webError = error as? ASWebAuthenticationSessionError,
+           webError.code == .canceledLogin {
+            return ""
+        }
         let raw = error.localizedDescription
         if raw.localizedCaseInsensitiveContains("invalid login") {
             return "이메일 또는 비밀번호가 맞지 않아요."
@@ -230,7 +251,14 @@ struct AuthFlowView: View {
         if raw.localizedCaseInsensitiveContains("already registered") {
             return "이미 가입된 이메일이에요. 로그인해 주세요."
         }
-        return "로그인에 실패했어요. 잠시 후 다시 시도해 주세요."
+        if raw.localizedCaseInsensitiveContains("provider is not enabled")
+            || raw.localizedCaseInsensitiveContains("unsupported provider") {
+            return "이 소셜 로그인은 아직 서버에 연결되지 않았어요. Supabase 대시보드 → Authentication → Providers에서 활성화해 주세요."
+        }
+        if raw.localizedCaseInsensitiveContains("email not confirmed") {
+            return "이메일 인증이 필요해요. 받은 편지함을 확인하거나, 개발 중이라면 대시보드에서 Confirm email을 꺼주세요."
+        }
+        return "로그인에 실패했어요. 잠시 후 다시 시도해 주세요. (\(raw))"
     }
 }
 

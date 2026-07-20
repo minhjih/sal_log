@@ -324,8 +324,34 @@ struct CaptureView: View {
             await app.reloadFeed()
             dismiss()
         } catch {
-            self.error = "업로드에 실패했어요. 네트워크를 확인해 주세요."
+            print("🔴 클립 저장 실패:", String(describing: error))
+            self.error = uploadErrorMessage(error)
         }
+    }
+
+    /// 실제 원인이 보이도록 에러를 분류해서 표시
+    private func uploadErrorMessage(_ error: Error) -> String {
+        let raw = String(describing: error)
+        if raw.localizedCaseInsensitiveContains("bucket not found") {
+            return "저장소 버킷(clips)이 없어요. 백엔드 마이그레이션 20260719000400이 적용됐는지 확인해 주세요."
+        }
+        if raw.localizedCaseInsensitiveContains("row-level security")
+            || raw.localizedCaseInsensitiveContains("unauthorized")
+            || raw.localizedCaseInsensitiveContains("policy") {
+            return "저장 권한이 거부됐어요. 그룹 멤버 상태와 Storage 정책(마이그레이션 400)을 확인해 주세요."
+        }
+        if raw.localizedCaseInsensitiveContains("payload too large")
+            || raw.localizedCaseInsensitiveContains("exceeded the maximum") {
+            return "영상 용량이 버킷 제한(50MB)을 넘었어요."
+        }
+        if raw.localizedCaseInsensitiveContains("mime")
+            || raw.localizedCaseInsensitiveContains("content-type") {
+            return "허용되지 않는 파일 형식이에요. (버킷 허용: mp4/quicktime)"
+        }
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "서버에 연결하지 못했어요. 네트워크 상태를 확인해 주세요."
+        }
+        return "업로드 실패: \(error.localizedDescription)"
     }
 
     private func importPicked() async {

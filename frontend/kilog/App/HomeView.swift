@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var showGroup = false
     @State private var showScan = false
     @State private var showExport = false
+    @State private var showProfile = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +52,11 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showExport) {
             ExportView()
+        }
+        .sheet(isPresented: $showProfile) {
+            ProfileSheetView()
+                .presentationDetents([.large])
+                .presentationBackground(Theme.bg)
         }
     }
 
@@ -100,27 +106,31 @@ struct HomeView: View {
         .padding(.bottom, 10)
     }
 
-    /// 멤버 아바타 필 — 나 + 파트너 (JSX couple-pill의 실계정 버전)
+    /// 멤버 아바타 필 — 나 + 파트너. 탭하면 내 프로필 편집.
     private var memberPill: some View {
-        HStack(spacing: 4) {
-            ForEach(app.members.prefix(2)) { member in
-                Circle()
-                    .fill(member.userId == app.myId
-                          ? Color(hex: member.colorHex)
-                          : Theme.surface2)
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Text(member.initial)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(member.userId == app.myId
-                                             ? Color(hex: "#101016") : Theme.faint)
-                    )
+        Button {
+            showProfile = true
+        } label: {
+            HStack(spacing: 4) {
+                ForEach(app.members.prefix(2)) { member in
+                    Circle()
+                        .fill(member.userId == app.myId
+                              ? Color(hex: member.colorHex)
+                              : Theme.surface2)
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Text(member.initial)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(member.userId == app.myId
+                                                 ? Color(hex: "#101016") : Theme.faint)
+                        )
+                }
             }
+            .padding(4)
+            .background(Theme.surface)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(Theme.line))
         }
-        .padding(4)
-        .background(Theme.surface)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Theme.line))
     }
 
     // ── 탭 바 ─────────────────────────────────────────────

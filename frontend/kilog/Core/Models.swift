@@ -114,7 +114,10 @@ struct MemberOverview: Codable, Identifiable, Hashable {
     var measurements: [BodyMeasurement]
 
     var id: UUID { userId }
-    var initial: String { String(nickname.prefix(1)).uppercased() }
+    var initial: String {
+        nickname.isEmpty ? "?" : String(nickname.prefix(1)).uppercased()
+    }
+    var displayName: String { nickname.isEmpty ? "이름 없음" : nickname }
 
     enum CodingKeys: String, CodingKey {
         case nickname, role, status, sharing, profile, measurements

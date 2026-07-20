@@ -95,7 +95,7 @@ struct GroupSheetView: View {
                             .foregroundStyle(Color(hex: "#101016")))
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(member.nickname).font(.system(size: 12.5, weight: .semibold))
+                        Text(member.displayName).font(.system(size: 12.5, weight: .semibold))
                         Text(memberSubtitle(member))
                             .font(.system(size: 10))
                             .foregroundStyle(Theme.muted)
