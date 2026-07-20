@@ -52,9 +52,20 @@ enum ClipService {
             var tag: ClipTag?
             if let f = foodByClip[clip.id]?.first {
                 tag = .food(name: f.foodName, kcal: f.calories)
-            } else if let w = workoutByClip[clip.id]?.first {
-                tag = .move(name: w.exerciseName, kcal: w.calories,
-                            minutes: w.durationMinutes, part: w.bodyPart)
+            } else if let ws = workoutByClip[clip.id], !ws.isEmpty {
+                if ws.count == 1 {
+                    let w = ws[0]
+                    tag = .move(name: w.exerciseName, kcal: w.calories,
+                                minutes: w.durationMinutes, part: w.bodyPart)
+                } else {
+                    // 한 클립에 여러 운동: 합산해서 표시
+                    tag = .move(
+                        name: "\(ws[0].exerciseName) 외 \(ws.count - 1)",
+                        kcal: ws.reduce(0) { $0 + $1.calories },
+                        minutes: ws.reduce(0) { $0 + $1.durationMinutes },
+                        part: nil
+                    )
+                }
             }
             return TaggedClip(clip: clip, tag: tag)
         }
@@ -62,13 +73,14 @@ enum ClipService {
     }
 
     // ── 클립 저장 (영상 업로드 → 행 삽입 → 태그 로그) ──────
+    /// 클립 저장 + 태그 기록들. 운동은 한 세션에 여러 개를 함께 남길 수 있다.
     static func saveClip(
         groupId: UUID,
         userId: UUID,
         videoFileURL: URL?,
         caption: String,
         recordedAt: Date,
-        tag: ClipTag?
+        tags: [ClipTag]
     ) async throws -> Clip {
         let clipId = UUID()
         var videoKey: String?
@@ -104,32 +116,33 @@ enum ClipService {
             .select().single()
             .execute().value
 
-        switch tag {
-        case .food(let name, let kcal):
-            struct FoodRow: Encodable {
-                let user_id: UUID; let group_id: UUID; let clip_id: UUID
-                let food_name: String; let calories: Int; let logged_at: Date
-            }
-            try await Supa.client.from("food_logs")
-                .insert(FoodRow(user_id: userId, group_id: groupId, clip_id: clipId,
-                                food_name: name, calories: kcal, logged_at: recordedAt))
-                .execute()
+        struct FoodRow: Encodable {
+            let user_id: UUID; let group_id: UUID; let clip_id: UUID
+            let food_name: String; let calories: Int; let logged_at: Date
+        }
+        struct WorkoutRow: Encodable {
+            let user_id: UUID; let group_id: UUID; let clip_id: UUID
+            let exercise_name: String; let calories: Int
+            let duration_minutes: Int; let body_part: String?; let logged_at: Date
+        }
 
-        case .move(let name, let kcal, let minutes, let part):
-            struct WorkoutRow: Encodable {
-                let user_id: UUID; let group_id: UUID; let clip_id: UUID
-                let exercise_name: String; let calories: Int
-                let duration_minutes: Int; let body_part: String?; let logged_at: Date
-            }
-            try await Supa.client.from("workout_logs")
-                .insert(WorkoutRow(user_id: userId, group_id: groupId, clip_id: clipId,
-                                   exercise_name: name, calories: kcal,
-                                   duration_minutes: minutes, body_part: part,
-                                   logged_at: recordedAt))
-                .execute()
-
-        case nil:
-            break
+        let foodRows = tags.compactMap { tag -> FoodRow? in
+            guard case .food(let name, let kcal) = tag else { return nil }
+            return FoodRow(user_id: userId, group_id: groupId, clip_id: clipId,
+                           food_name: name, calories: kcal, logged_at: recordedAt)
+        }
+        let workoutRows = tags.compactMap { tag -> WorkoutRow? in
+            guard case .move(let name, let kcal, let minutes, let part) = tag else { return nil }
+            return WorkoutRow(user_id: userId, group_id: groupId, clip_id: clipId,
+                              exercise_name: name, calories: kcal,
+                              duration_minutes: minutes, body_part: part,
+                              logged_at: recordedAt)
+        }
+        if !foodRows.isEmpty {
+            try await Supa.client.from("food_logs").insert(foodRows).execute()
+        }
+        if !workoutRows.isEmpty {
+            try await Supa.client.from("workout_logs").insert(workoutRows).execute()
         }
 
         return inserted
