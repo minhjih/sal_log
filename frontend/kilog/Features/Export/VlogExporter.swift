@@ -174,7 +174,7 @@ final class VlogExporter {
 
         // 5) 내보내기
         let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sal-log-\(UUID().uuidString).mp4")
+            .appendingPathComponent("kilog-\(UUID().uuidString).mp4")
         guard let session = AVAssetExportSession(
             asset: composition, presetName: AVAssetExportPreset960x540
         ) else { throw ExportError.exportFailed }

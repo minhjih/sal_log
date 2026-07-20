@@ -14,7 +14,7 @@ struct kilogApp: App {
                 .tint(Theme.me)
                 .onAppear { app.start() }
                 .onOpenURL { url in
-                    // OAuth(app.sallog://auth-callback) + 초대 딥링크(/join/SAL-XXXXXX)
+                    // OAuth(app.kilog://auth-callback) + 초대 딥링크(/join/KL-XXXXXX)
                     AuthService.handleOpenURL(url)
                     if url.path.hasPrefix("/join/") {
                         PendingInvite.token = url.lastPathComponent

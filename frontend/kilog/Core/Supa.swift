@@ -7,7 +7,7 @@ import Supabase
 enum SupabaseConfig {
     static let url = URL(string: "https://YOUR-PROJECT-REF.supabase.co")!
     static let anonKey = "YOUR-ANON-KEY"
-    static let redirectURL = URL(string: "app.sallog://auth-callback")!
+    static let redirectURL = URL(string: "app.kilog://auth-callback")!
 }
 
 enum Supa {

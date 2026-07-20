@@ -130,13 +130,13 @@ struct GroupSheetView: View {
             Text("초대 링크").font(.system(size: 10.5)).foregroundStyle(Theme.muted)
 
             if let token = inviteToken {
-                Text("https://sal-log.app/join/\(token)")
+                Text("https://kilog.app/join/\(token)")
                     .font(.system(size: 11, design: .monospaced))
                     .lineLimit(1).truncationMode(.middle)
 
                 HStack(spacing: 8) {
                     Button {
-                        UIPasteboard.general.string = "https://sal-log.app/join/\(token)"
+                        UIPasteboard.general.string = "https://kilog.app/join/\(token)"
                         copied = true
                         Task {
                             try? await Task.sleep(for: .seconds(1.2))
@@ -147,7 +147,7 @@ struct GroupSheetView: View {
                     }
                     .buttonStyle(DuoButtonStyle())
 
-                    ShareLink(item: URL(string: "https://sal-log.app/join/\(token)")!) {
+                    ShareLink(item: URL(string: "https://kilog.app/join/\(token)")!) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Theme.text)

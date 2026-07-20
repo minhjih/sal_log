@@ -239,7 +239,7 @@ struct Wordmark: View {
     var size: CGFloat = 25
     var body: some View {
         HStack(spacing: 0) {
-            Text("sal").font(.system(size: size, weight: .light))
+            Text("ki").font(.system(size: size, weight: .light))
             Text("—")
                 .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(Theme.duo)

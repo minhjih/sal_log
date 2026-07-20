@@ -1,7 +1,9 @@
-# sal-log backend (Supabase)
+# Kilog backend (Supabase)
 
-커플/친구 그룹 다이어트 브이로그 앱 **sal-log**의 백엔드입니다.
+커플/친구 그룹 다이어트 브이로그 앱 **Kilog**의 백엔드입니다.
 Postgres 스키마 + RLS + RPC + Storage 정책 전부가 `supabase/migrations/`에 SQL로 정의되어 있습니다.
+
+> 처음 설정한다면 **[SETUP.md](SETUP.md)** 를 따라 하세요 — 프로젝트 생성부터 앱 연결·동작 확인까지 단계별 가이드입니다.
 
 ## 데이터 구조
 
@@ -32,7 +34,7 @@ food_catalog          음식 칼로리 카탈로그 (시드 포함)
 
 ## 보안 설계 요점
 
-- **초대 토큰은 해시로만 저장** (`sha256(upper(token))`). 원문 `SAL-XXXXXX` 토큰은
+- **초대 토큰은 해시로만 저장** (`sha256(upper(token))`). 원문 `KL-XXXXXX` 토큰은
   `create_group`/`create_invite` 응답에서 1회만 반환되며, 만료(기본 7일)·사용 횟수 제한·폐기(`revoked_at`)를
   전부 서버에서 검증합니다. 수락은 `accept_invite` RPC가 정원 검사와 함께 원자적으로 처리합니다.
 - **신체 데이터 접근은 2중 게이트**: `profiles.visibility = 'members'` **그리고**
@@ -61,7 +63,7 @@ supabase db push
 
 이후 대시보드에서:
 1. **Auth → Providers**: Apple / Google / Kakao 활성화 (client id·secret 입력)
-2. **Auth → URL Configuration**: redirect URL에 `app.sallog://auth-callback` 추가
+2. **Auth → URL Configuration**: redirect URL에 `app.kilog://auth-callback` 추가
 3. 프론트엔드 `SupabaseConfig.swift`에 Project URL + anon key 입력
 
 ## 클라이언트 호출 흐름
