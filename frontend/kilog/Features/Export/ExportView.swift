@@ -16,13 +16,36 @@ struct ExportView: View {
     }
     @State private var stage: Stage = .preparing
     @State private var player: AVPlayer?
+    @State private var format: VlogExporter.ExportFormat = .screen
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 12) {
-                // 미리보기 캔버스 (16:9)
+                // 화면비 선택 — 바꾸면 다시 합성
+                HStack(spacing: 6) {
+                    ForEach(VlogExporter.ExportFormat.allCases) { f in
+                        Button {
+                            guard format != f else { return }
+                            format = f
+                            player?.pause()
+                            Task { await run() }
+                        } label: {
+                            Text(f.label)
+                                .font(.system(size: 12, weight: format == f ? .bold : .medium))
+                                .foregroundStyle(format == f ? Theme.text : Theme.muted)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(format == f ? Theme.surface2 : Theme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10)
+                                    .stroke(format == f ? Theme.lover : Theme.line))
+                        }
+                    }
+                }
+
+                // 미리보기 캔버스 (선택한 화면비)
                 ZStack {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Theme.bg)
@@ -57,7 +80,8 @@ struct ExportView: View {
                             .padding()
                     }
                 }
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .aspectRatio(format.aspect, contentMode: .fit)
+                .frame(maxHeight: 480)
 
                 // 하단 바
                 HStack(spacing: 8) {
@@ -157,7 +181,7 @@ struct ExportView: View {
                 dateLabel: dateFormatter.string(from: Date())
             )
 
-            let output = try await VlogExporter().export(input) { p in
+            let output = try await VlogExporter(format: format).export(input) { p in
                 Task { @MainActor in
                     if case .rendering = stage { stage = .rendering(p) }
                 }
