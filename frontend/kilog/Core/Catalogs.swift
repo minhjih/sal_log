@@ -13,34 +13,6 @@ final class Catalogs: ObservableObject {
 
     static let parts = ["하체", "상체", "코어", "유산소"]
 
-    /// 부위별 대표 추천 운동 (JSX PART_PICK)
-    static let partPick: [String: (exercise: String, minutes: Int)] = [
-        "하체": ("스쿼트·런지", 30),
-        "상체": ("웨이트 (보통)", 40),
-        "코어": ("플랭크·복근", 20),
-        "유산소": ("러닝 8km/h", 30),
-    ]
-
-    struct FoodRec { let name: String; let kcal: Int; let note: String }
-
-    static let surplusRecs = (
-        why: "오늘은 칼로리가 좀 남았어요. 내일은 가볍게 단백질 위주로 가볼까요?",
-        items: [
-            FoodRec(name: "닭가슴살 샐러드", kcal: 350, note: "단백질 30g"),
-            FoodRec(name: "두부 포케", kcal: 420, note: "포만감 좋고 가벼움"),
-            FoodRec(name: "그릭요거트 볼", kcal: 280, note: "아침 대용 추천"),
-        ]
-    )
-
-    static let deficitRecs = (
-        why: "오늘 잘 태웠어요. 근손실 안 나게 단백질만 챙기면 완벽해요.",
-        items: [
-            FoodRec(name: "연어 스테이크 정식", kcal: 550, note: "오메가3 + 단백질"),
-            FoodRec(name: "소고기 미역국 정식", kcal: 600, note: "회복식으로 좋음"),
-            FoodRec(name: "닭가슴살 리조또", kcal: 520, note: "운동 후 한 끼"),
-        ]
-    )
-
     func load() async {
         do {
             async let ex: [ExerciseItem] = Supa.client

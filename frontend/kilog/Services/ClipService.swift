@@ -72,6 +72,35 @@ enum ClipService {
         return DayFeed(clips: tagged, foods: foods, workouts: workouts)
     }
 
+    // ── 최근 N일 로그 (지표 탭: 부위 비교·스트레이크) ──────
+    struct RecentLogs {
+        var foods: [FoodLog]
+        var workouts: [WorkoutLog]
+    }
+
+    static func fetchRecentLogs(groupId: UUID, days: Int = 30) async throws -> RecentLogs {
+        let start = Calendar.current.date(
+            byAdding: .day, value: -days,
+            to: Calendar.current.startOfDay(for: Date())
+        )!
+
+        async let foodsReq: [FoodLog] = Supa.client.from("food_logs")
+            .select()
+            .eq("group_id", value: groupId)
+            .gte("logged_at", value: start)
+            .order("logged_at")
+            .execute().value
+
+        async let workoutsReq: [WorkoutLog] = Supa.client.from("workout_logs")
+            .select()
+            .eq("group_id", value: groupId)
+            .gte("logged_at", value: start)
+            .order("logged_at")
+            .execute().value
+
+        return try await RecentLogs(foods: foodsReq, workouts: workoutsReq)
+    }
+
     // ── 클립 저장 (영상 업로드 → 행 삽입 → 태그 로그) ──────
     /// 클립 저장 + 태그 기록들. 운동은 한 세션에 여러 개를 함께 남길 수 있다.
     static func saveClip(
