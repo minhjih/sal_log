@@ -79,7 +79,7 @@ struct TodayView: View {
                             .overlay(Text(member.initial)
                                 .font(.system(size: 9, weight: .heavy))
                                 .foregroundStyle(Color(hex: "#101016")))
-                        Text(member.nickname)
+                        Text(member.displayName)
                             .font(.system(size: 12.5, weight: .semibold))
                         Spacer()
                         Text(isMe ? "내 계정" : "공유됨")

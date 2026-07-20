@@ -225,7 +225,7 @@ struct TheaterView: View {
                 Spacer()
                 HStack {
                     if side.active, let member {
-                        Text(member.nickname)
+                        Text(member.displayName)
                             .font(.system(size: 10.5, weight: .bold))
                             .kerning(0.5)
                             .foregroundStyle(Color(hex: member.colorHex))
