@@ -27,7 +27,7 @@ enum HealthMath {
         Int(((met * 3.5 * (weightKg ?? 60)) / 200 * Double(minutes)).rounded())
     }
 
-    /// 하루 수지: 섭취 − (기초대사 + 운동 소모)
+    /// 하루 칼로리 밸런스: 섭취 − (기초대사 + 운동 소모)
     struct DailyStats {
         var intake = 0
         var burn = 0

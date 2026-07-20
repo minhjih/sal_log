@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 코치 탭: 오늘 자극한 부위 분석 → 내일 운동 추천(MET 기반) + 수지 기반 음식 추천
+/// 코치 탭: 오늘 자극한 부위 분석 → 내일 루틴 추천(MET 기반) + 밸런스 기반 메뉴 추천
 struct CoachView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var catalogs: Catalogs
@@ -9,19 +9,19 @@ struct CoachView: View {
         ScrollView {
             VStack(spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(app.group?.type == .couple ? "커플 코치" : "그룹 코치")
+                    Text("코치")
                         .font(.system(size: 19, weight: .bold))
                     Spacer()
-                    Text("각자에게 맞는 내일 계획")
+                    Text("내일 루틴, 미리 준비해뒀어요")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.muted)
                 }
                 .padding(.horizontal, 2)
 
                 HStack {
-                    Text("함께 보기").font(.system(size: 12, weight: .bold))
+                    Text("같이 보기").font(.system(size: 12, weight: .bold))
                     Spacer()
-                    Text("추천 운동과 식단을 서로 확인하고 응원해요")
+                    Text("서로의 내일 루틴도 볼 수 있어요")
                         .font(.system(size: 10.5))
                         .foregroundStyle(Theme.muted)
                 }
@@ -37,7 +37,7 @@ struct CoachView: View {
                     MemberCoachPanel(member: member)
                 }
 
-                Text("추천은 운동 기록·칼로리 수지·인바디 수치를 바탕으로 한 참고용이에요.")
+                Text("추천은 운동 기록·칼로리 밸런스·인바디 수치 기반 참고용이에요.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.faint)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,7 +120,7 @@ struct MemberCoachPanel: View {
                     }
                 }
                 Spacer()
-                Text(stats.balance <= 0 ? "적자" : "흑자")
+                Text(stats.balance <= 0 ? "굿" : "오버")
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(stats.balance <= 0 ? Theme.green : Theme.me)
                     .padding(.horizontal, 9).padding(.vertical, 5)
@@ -142,7 +142,7 @@ struct MemberCoachPanel: View {
                 }
             }
 
-            sectionTitle("내일 추천 운동")
+            sectionTitle("내일 루틴")
             ForEach(recommendations) { rec in
                 recRow(chip: rec.part, chipColor: Theme.lover,
                        title: rec.exercise,
@@ -150,7 +150,7 @@ struct MemberCoachPanel: View {
                        kcal: "−\(rec.kcal)", kcalColor: Theme.green)
             }
 
-            sectionTitle("추천 음식")
+            sectionTitle("추천 메뉴")
             ForEach(foodRecs.prefix(2), id: \.name) { food in
                 recRow(chip: "밥", chipColor: Theme.me,
                        title: food.name, subtitle: food.note,
@@ -165,7 +165,7 @@ struct MemberCoachPanel: View {
 
     private var balanceLabel: String {
         let b = stats.balance
-        return "오늘 수지 \(b > 0 ? "+" : "")\(b) kcal"
+        return "오늘 밸런스 \(b > 0 ? "+" : "")\(b) kcal"
     }
 
     private func sectionTitle(_ text: String) -> some View {

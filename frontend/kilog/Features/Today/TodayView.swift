@@ -2,7 +2,7 @@ import SwiftUI
 import Foundation
 import Charts
 
-/// 오늘 탭: 연속 브이로그 + 지금 찍기 + 멤버별 수지 카드
+/// 오늘 탭: 연속 브이로그 + 지금 찍기 + 변화 그래프 + 오늘의 컷
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
     @StateObject private var theater = TheaterModel()
@@ -211,9 +211,7 @@ struct TrendChartCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("우리의 변화").font(.system(size: 13, weight: .bold))
-                Spacer()
-                // 지표 토글
+                // 지표 토글이 곧 헤더 — 별도 타이틀 없이 깔끔하게
                 HStack(spacing: 0) {
                     ForEach(Metric.allCases, id: \.self) { m in
                         Button {

@@ -49,15 +49,18 @@ struct CaptureView: View {
     @State private var foodFavorites: [FavoriteEntry] = []
     @State private var workoutFavorites: [FavoriteEntry] = []
 
-    // 운동 검색 (Compendium 기반 카탈로그 ~100종)
+    // 운동 검색·필터 (Compendium 기반 카탈로그 ~100종)
     @State private var moveQuery = ""
+    @State private var moveCategory = "전체"
+    private static let moveCategories = ["전체", "유산소", "하체", "상체", "코어", "전신"]
 
     private var filteredExercises: [ExerciseItem] {
         let query = moveQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return catalogs.exercises }
-        return catalogs.exercises.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || $0.bodyPart.localizedCaseInsensitiveContains(query)
+        return catalogs.exercises.filter { item in
+            let categoryOK = moveCategory == "전체" || item.bodyPart == moveCategory
+            let queryOK = query.isEmpty
+                || item.name.localizedCaseInsensitiveContains(query)
+            return categoryOK && queryOK
         }
     }
 
@@ -351,12 +354,12 @@ struct CaptureView: View {
                 }
             }
 
-            // 검색 — 운동 이름 또는 부위(하체/유산소…)로
+            // 검색
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.faint)
-                TextField("운동 검색 (예: 바레, 수영, 하체)", text: $moveQuery)
+                TextField("어떤 운동 했어요?", text: $moveQuery)
                     .font(.system(size: 14))
                 if !moveQuery.isEmpty {
                     Button {
@@ -373,9 +376,34 @@ struct CaptureView: View {
             .clipShape(RoundedRectangle(cornerRadius: 11))
             .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
 
+            // 카테고리 필터
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Self.moveCategories, id: \.self) { category in
+                        Button {
+                            moveCategory = category
+                        } label: {
+                            Text(category)
+                                .font(.system(size: 12,
+                                              weight: moveCategory == category ? .bold : .regular))
+                                .foregroundStyle(moveCategory == category
+                                                 ? Color(hex: "#14060C") : Theme.muted)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(moveCategory == category
+                                            ? AnyShapeStyle(Theme.duo)
+                                            : AnyShapeStyle(Theme.surface))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(
+                                    moveCategory == category ? .clear : Theme.line))
+                        }
+                    }
+                }
+            }
+
+            // 운동 리스트 — 선택하면 예상 소모 칼로리가 바로 보임
             ScrollView {
                 if filteredExercises.isEmpty {
-                    Text("'\(moveQuery)' 검색 결과가 없어요.\n아래 직접 입력으로 기록해 주세요.")
+                    Text("'\(moveQuery)' 검색 결과가 없어요.\n아래에서 직접 입력해 주세요.")
                         .font(.system(size: 12))
                         .multilineTextAlignment(.center)
                         .lineSpacing(3)
@@ -383,16 +411,14 @@ struct CaptureView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 } else {
-                    FlowChips(items: filteredExercises,
-                              isOn: { $0.id == selectedMove?.id && !useCustomMove }) { item in
-                        selectedMove = item
-                        useCustomMove = false
-                    } label: { item in
-                        (item.name, item.bodyPart)
+                    LazyVStack(spacing: 6) {
+                        ForEach(filteredExercises) { item in
+                            exerciseRow(item)
+                        }
                     }
                 }
             }
-            .frame(maxHeight: 140)
+            .frame(maxHeight: 210)
 
             // 목록에 없는 운동: 직접 입력
             Button {
@@ -486,6 +512,41 @@ struct CaptureView: View {
                 .card(radius: 12)
             }
         }
+    }
+
+    /// 운동 리스트 행 — 이름·부위·현재 시간 기준 예상 칼로리
+    private func exerciseRow(_ item: ExerciseItem) -> some View {
+        let selected = item.id == selectedMove?.id && !useCustomMove
+        let estimate = HealthMath.metKcal(met: item.met,
+                                          weightKg: app.myProfile?.weight,
+                                          minutes: minutes)
+        return Button {
+            selectedMove = item
+            useCustomMove = false
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.system(size: 13.5, weight: selected ? .bold : .medium))
+                    Text("\(item.bodyPart) · MET \(item.met, specifier: "%.1f")")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Text("−\(estimate)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.green)
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(selected ? Theme.lover : Theme.faint)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(selected ? Theme.surface2 : Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? Theme.lover : Theme.line))
+        }
+        .foregroundStyle(Theme.text)
     }
 
     /// 즐겨찾기 칩 한 줄 (음식/운동 공용)

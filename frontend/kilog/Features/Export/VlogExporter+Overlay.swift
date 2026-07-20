@@ -189,7 +189,7 @@ extension VlogExporter {
                                        width: 220 * fs, height: 50 * fs)
             layer.addSublayer(balanceText)
 
-            let unit = Self.textLayer("kcal 수지", size: 17 * fs, weight: .regular,
+            let unit = Self.textLayer("칼로리 밸런스", size: 17 * fs, weight: .regular,
                                       color: UIColor(Theme.muted), alignment: .center)
             unit.frame = CGRect(x: centerX - 110 * fs, y: cardTop + 124 * fs,
                                 width: 220 * fs, height: 22 * fs)
