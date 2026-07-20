@@ -20,9 +20,10 @@ returns text language sql volatile as $$
   from generate_series(1, 6);
 $$;
 
+-- Supabase는 pgcrypto를 extensions 스키마에 설치하므로 digest를 정규화해서 호출
 create or replace function public.hash_invite_token(p_token text)
 returns text language sql immutable as $$
-  select encode(digest(upper(trim(p_token)), 'sha256'), 'hex');
+  select encode(extensions.digest(upper(trim(p_token)), 'sha256'), 'hex');
 $$;
 
 -- 멤버 색상 팔레트 (가입 순서대로)
