@@ -82,6 +82,12 @@ struct CaptureView: View {
             case .meta: metaStage
             }
         }
+        .sheet(isPresented: .init(
+            get: { step == .meta },
+            set: { _ in }   // 시트 자체 닫기 방지 — 저장 또는 우상단 X로만 종료
+        )) {
+            tagSheet
+        }
         .task {
             await camera.configure()
             selectedFood = catalogs.foods.first
@@ -214,22 +220,40 @@ struct CaptureView: View {
     }
 
     // ── 2) 메타 입력 ──────────────────────────────────────
+    // 촬영 확인: 영상은 뒤에 전체화면, 입력은 드래그 시트(반절↔전체)로
     private var metaStage: some View {
-        VStack(spacing: 0) {
+        ZStack(alignment: .topTrailing) {
             if let videoURL {
                 LoopingPlayerView(url: videoURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .frame(minHeight: 140)
+                    .ignoresSafeArea()
             }
-
-            // 키보드가 올라와도 전체 항목에 접근할 수 있게 패널 자체를 스크롤
-            ScrollView {
-                metaPanel
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.5))
+                    .clipShape(Circle())
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Theme.bg)
+            .padding(.top, 54)
+            .padding(.trailing, 18)
         }
-        .ignoresSafeArea(edges: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 인스타 댓글처럼 위로 쓸면 전체화면, 아래로 내리면 반절로 줄어드는 입력 시트
+    private var tagSheet: some View {
+        ScrollView {
+            metaPanel
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .presentationDetents([.fraction(0.5), .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.5)))
+        .presentationBackground(Theme.bg)
+        .interactiveDismissDisabled()
     }
 
     private var metaPanel: some View {
