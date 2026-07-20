@@ -74,7 +74,8 @@ enum ClipService {
         var videoKey: String?
 
         if let fileURL = videoFileURL {
-            let key = "\(groupId.uuidString)/\(userId.uuidString)/\(clipId.uuidString).mp4"
+            // 경로는 소문자 UUID로 통일 (Storage 정책의 auth.uid() 표기와 일치)
+            let key = "\(groupId.uuidString.lowercased())/\(userId.uuidString.lowercased())/\(clipId.uuidString.lowercased()).mp4"
             let data = try Data(contentsOf: fileURL)
             try await Supa.client.storage.from("clips").upload(
                 key, data: data,
