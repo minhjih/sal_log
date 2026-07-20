@@ -6,7 +6,7 @@ struct HomeView: View {
 
     enum Tab: String, CaseIterable {
         case today = "오늘"
-        case coach = "코치"
+        case metrics = "지표"
         case body = "바디"
     }
 
@@ -25,8 +25,8 @@ struct HomeView: View {
                 switch tab {
                 case .today:
                     TodayView(onCapture: { showCapture = true })
-                case .coach:
-                    CoachView()
+                case .metrics:
+                    MetricsView()
                 case .body:
                     BodyView(onScan: { showScan = true })
                 }
@@ -137,7 +137,7 @@ struct HomeView: View {
     private var tabbar: some View {
         HStack {
             tabButton(.today, icon: "play.square")
-            tabButton(.coach, icon: "sparkles")
+            tabButton(.metrics, icon: "figure.arms.open")
             tabButton(.body, icon: "chart.line.uptrend.xyaxis")
         }
         .padding(6)

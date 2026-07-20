@@ -30,8 +30,8 @@ struct CaptureView: View {
 
     enum TagMode: String, CaseIterable {
         case none = "그냥 일상"
-        case food = "먹었어요"
-        case move = "움직였어요"
+        case food = "음식"
+        case move = "운동"
     }
 
     // 목록에 없는 음식 직접 입력
@@ -57,6 +57,7 @@ struct CaptureView: View {
         var kcal: Int
         var minutes: Int
         var part: String?
+        var muscles: [String: Double]?
         var isCustom: Bool
     }
     @State private var sessionMoves: [MoveEntry] = []
@@ -75,14 +76,22 @@ struct CaptureView: View {
     @State private var moveCategory = "전체"
     private static let moveCategories = ["전체", "유산소", "하체", "상체", "코어", "전신"]
 
+    private var favoriteExerciseNames: Set<String> {
+        Set(workoutFavorites.map(\.name))
+    }
+
     private var filteredExercises: [ExerciseItem] {
         let query = moveQuery.trimmingCharacters(in: .whitespaces)
-        return catalogs.exercises.filter { item in
+        let filtered = catalogs.exercises.filter { item in
             let categoryOK = moveCategory == "전체" || item.bodyPart == moveCategory
             let queryOK = query.isEmpty
                 || item.name.localizedCaseInsensitiveContains(query)
             return categoryOK && queryOK
         }
+        // 즐겨찾기 먼저
+        let favorites = favoriteExerciseNames
+        return filtered.filter { favorites.contains($0.name) }
+            + filtered.filter { !favorites.contains($0.name) }
     }
 
     var body: some View {
@@ -409,10 +418,16 @@ struct CaptureView: View {
             // 내 즐겨찾기 — 직접 입력 이력, 자주 쓴 순
             if !workoutFavorites.isEmpty {
                 favoritesRow(workoutFavorites) { fav in
-                    useCustomMove = true
-                    customMoveName = fav.name
-                    customMoveKcal = fav.kcal
-                    customMovePart = fav.bodyPart ?? "전신"
+                    // 카탈로그에 있는 운동이면 바로 선택, 아니면 직접 입력으로 채움
+                    if let item = catalogs.exercises.first(where: { $0.name == fav.name }) {
+                        selectedMove = item
+                        useCustomMove = false
+                    } else {
+                        useCustomMove = true
+                        customMoveName = fav.name
+                        customMoveKcal = fav.kcal > 0 ? fav.kcal : nil
+                        customMovePart = fav.bodyPart ?? "전신"
+                    }
                     if let m = fav.minutes { minutes = m }
                 }
             }
@@ -655,7 +670,9 @@ struct CaptureView: View {
                 return nil
             }
             return MoveEntry(name: String(name.prefix(20)), kcal: kcal,
-                             minutes: minutes, part: customMovePart, isCustom: true)
+                             minutes: minutes, part: customMovePart,
+                             muscles: MuscleMap.defaultLoads(bodyPart: customMovePart),
+                             isCustom: true)
         }
         guard let m = selectedMove else { return nil }
         if m.isStrength {
@@ -663,13 +680,17 @@ struct CaptureView: View {
                                           minutes: strengthMinutes)
             return MoveEntry(
                 name: "\(m.name) \(strengthWeight)kg×\(strengthReps)×\(strengthSets)세트",
-                kcal: kcal, minutes: strengthMinutes, part: m.bodyPart, isCustom: false
+                kcal: kcal, minutes: strengthMinutes, part: m.bodyPart,
+                muscles: m.muscleLoads ?? MuscleMap.defaultLoads(bodyPart: m.bodyPart),
+                isCustom: false
             )
         }
         let kcal = HealthMath.metKcal(met: m.met, weightKg: app.myProfile?.weight,
                                       minutes: minutes)
         return MoveEntry(name: m.name, kcal: kcal, minutes: minutes,
-                         part: m.bodyPart, isCustom: false)
+                         part: m.bodyPart,
+                         muscles: m.muscleLoads ?? MuscleMap.defaultLoads(bodyPart: m.bodyPart),
+                         isCustom: false)
     }
 
     private func addCurrentMove() {
@@ -719,39 +740,63 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 운동 리스트 행 — 이름·부위·현재 시간 기준 예상 칼로리
+    /// 운동 리스트 행 — 이름·부위·예상 칼로리 + 즐겨찾기 별
     private func exerciseRow(_ item: ExerciseItem) -> some View {
         let selected = item.id == selectedMove?.id && !useCustomMove
+        let isFavorite = favoriteExerciseNames.contains(item.name)
         let estimate = HealthMath.metKcal(met: item.met,
                                           weightKg: app.myProfile?.weight,
                                           minutes: minutes)
-        return Button {
-            selectedMove = item
-            useCustomMove = false
-        } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name)
-                        .font(.system(size: 13.5, weight: selected ? .bold : .medium))
-                    Text("\(item.bodyPart) · MET \(item.met, specifier: "%.1f")")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Theme.muted)
-                }
-                Spacer()
-                Text("−\(estimate)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.green)
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(selected ? Theme.lover : Theme.faint)
+        return HStack(spacing: 10) {
+            // 즐겨찾기 토글 (행 선택과 별개 터치 영역)
+            Button {
+                Task { await toggleExerciseFavorite(item) }
+            } label: {
+                Image(systemName: isFavorite ? "star.fill" : "star")
+                    .font(.system(size: 14))
+                    .foregroundStyle(isFavorite ? Theme.lover : Theme.faint)
+                    .frame(width: 28, height: 28)
             }
-            .padding(.horizontal, 12).padding(.vertical, 9)
-            .background(selected ? Theme.surface2 : Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12)
-                .stroke(selected ? Theme.lover : Theme.line))
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.system(size: 13.5, weight: selected ? .bold : .medium))
+                Text("\(item.bodyPart) · MET \(item.met, specifier: "%.1f")")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer()
+            Text("−\(estimate)")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(Theme.green)
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 16))
+                .foregroundStyle(selected ? Theme.lover : Theme.faint)
         }
         .foregroundStyle(Theme.text)
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .background(selected ? Theme.surface2 : Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12)
+            .stroke(selected ? Theme.lover : Theme.line))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedMove = item
+            useCustomMove = false
+        }
+    }
+
+    /// 카탈로그 운동 즐겨찾기 등록/해제
+    private func toggleExerciseFavorite(_ item: ExerciseItem) async {
+        if favoriteExerciseNames.contains(item.name) {
+            try? await FavoritesService.remove(kind: .workout, name: item.name)
+        } else {
+            try? await FavoritesService.bump(kind: .workout, name: item.name,
+                                             kcal: 0, minutes: nil,
+                                             bodyPart: item.bodyPart)
+        }
+        workoutFavorites = (try? await FavoritesService.fetch(kind: .workout)) ?? []
     }
 
     /// 즐겨찾기 칩 한 줄 (음식/운동 공용)
@@ -773,9 +818,11 @@ struct CaptureView: View {
                                     .font(.system(size: 9))
                                     .foregroundStyle(Theme.lover)
                                 Text(fav.name).font(.system(size: 13))
-                                Text("\(fav.kcal)")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Theme.muted)
+                                if fav.kcal > 0 {
+                                    Text("\(fav.kcal)")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Theme.muted)
+                                }
                             }
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .background(Theme.surface)
@@ -822,7 +869,8 @@ struct CaptureView: View {
                 entries = [single]
             }
             tags = entries.map {
-                .move(name: $0.name, kcal: $0.kcal, minutes: $0.minutes, part: $0.part)
+                .move(name: $0.name, kcal: $0.kcal, minutes: $0.minutes,
+                      part: $0.part, muscles: $0.muscles)
             }
             customMoveEntries = entries.filter(\.isCustom)
         }

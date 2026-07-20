@@ -56,20 +56,50 @@ enum ClipService {
                 if ws.count == 1 {
                     let w = ws[0]
                     tag = .move(name: w.exerciseName, kcal: w.calories,
-                                minutes: w.durationMinutes, part: w.bodyPart)
+                                minutes: w.durationMinutes, part: w.bodyPart,
+                                muscles: w.muscleLoads)
                 } else {
                     // 한 클립에 여러 운동: 합산해서 표시
                     tag = .move(
                         name: "\(ws[0].exerciseName) 외 \(ws.count - 1)",
                         kcal: ws.reduce(0) { $0 + $1.calories },
                         minutes: ws.reduce(0) { $0 + $1.durationMinutes },
-                        part: nil
+                        part: nil, muscles: nil
                     )
                 }
             }
             return TaggedClip(clip: clip, tag: tag)
         }
         return DayFeed(clips: tagged, foods: foods, workouts: workouts)
+    }
+
+    // ── 최근 N일 로그 (지표 탭: 부위 비교·스트레이크) ──────
+    struct RecentLogs {
+        var foods: [FoodLog]
+        var workouts: [WorkoutLog]
+    }
+
+    static func fetchRecentLogs(groupId: UUID, days: Int = 30) async throws -> RecentLogs {
+        let start = Calendar.current.date(
+            byAdding: .day, value: -days,
+            to: Calendar.current.startOfDay(for: Date())
+        )!
+
+        async let foodsReq: [FoodLog] = Supa.client.from("food_logs")
+            .select()
+            .eq("group_id", value: groupId)
+            .gte("logged_at", value: start)
+            .order("logged_at")
+            .execute().value
+
+        async let workoutsReq: [WorkoutLog] = Supa.client.from("workout_logs")
+            .select()
+            .eq("group_id", value: groupId)
+            .gte("logged_at", value: start)
+            .order("logged_at")
+            .execute().value
+
+        return try await RecentLogs(foods: foodsReq, workouts: workoutsReq)
     }
 
     // ── 클립 저장 (영상 업로드 → 행 삽입 → 태그 로그) ──────
@@ -123,7 +153,8 @@ enum ClipService {
         struct WorkoutRow: Encodable {
             let user_id: UUID; let group_id: UUID; let clip_id: UUID
             let exercise_name: String; let calories: Int
-            let duration_minutes: Int; let body_part: String?; let logged_at: Date
+            let duration_minutes: Int; let body_part: String?
+            let muscle_loads: [String: Double]?; let logged_at: Date
         }
 
         let foodRows = tags.compactMap { tag -> FoodRow? in
@@ -132,11 +163,12 @@ enum ClipService {
                            food_name: name, calories: kcal, logged_at: recordedAt)
         }
         let workoutRows = tags.compactMap { tag -> WorkoutRow? in
-            guard case .move(let name, let kcal, let minutes, let part) = tag else { return nil }
+            guard case .move(let name, let kcal, let minutes, let part, let muscles) = tag
+            else { return nil }
             return WorkoutRow(user_id: userId, group_id: groupId, clip_id: clipId,
                               exercise_name: name, calories: kcal,
                               duration_minutes: minutes, body_part: part,
-                              logged_at: recordedAt)
+                              muscle_loads: muscles, logged_at: recordedAt)
         }
         if !foodRows.isEmpty {
             try await Supa.client.from("food_logs").insert(foodRows).execute()

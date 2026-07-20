@@ -24,6 +24,8 @@ final class AppState: ObservableObject {
     @Published var invite: InviteMeta?
 
     @Published var feed = ClipService.DayFeed(clips: [], foods: [], workouts: [])
+    /// 최근 30일 로그 — 스트레이크(오늘 탭)·근육 부하 비교(지표 탭) 공용
+    @Published var recentLogs = ClipService.RecentLogs(foods: [], workouts: [])
     @Published var needsOnboardingScan = false
     @Published var errorMessage: String?
 
@@ -121,6 +123,12 @@ final class AppState: ObservableObject {
             feed = try await ClipService.fetchDay(groupId: group.id, date: date)
             // 실시간으로 새로 올라온 클립은 백그라운드에서 캐시
             Task { await self.preloadVideos(onProgress: nil) }
+            // 스트레이크·근육 비교용 최근 로그 갱신 (백그라운드)
+            Task { [groupId = group.id] in
+                if let logs = try? await ClipService.fetchRecentLogs(groupId: groupId, days: 30) {
+                    self.recentLogs = logs
+                }
+            }
         } catch {
             errorMessage = "오늘 기록을 불러오지 못했어요."
         }

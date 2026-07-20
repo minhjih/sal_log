@@ -59,7 +59,7 @@ kilog/
     ├── Today/       Timeline(세그먼트 엔진), TheaterView(2트랙 플레이어), TodayView
     ├── Capture/     CameraModel(AVCapture), CaptureView(촬영→메타→저장)
     ├── Body/        InBodyOCR(Vision), ScanFlowView, BodyView(Swift Charts)
-    ├── Coach/       CoachView(부위 분석·MET 추천·수지 기반 식단)
+    ├── Metrics/     MetricsView(변화 그래프·스트레이크·인체 모형 부위 비교)
     ├── Group/       GroupSheetView(멤버·초대 토큰·공유 설정)
     └── Export/      VlogExporter(+Overlay), ExportView
 ```
@@ -84,5 +84,3 @@ kilog/
 - **TDEE**: `BMR × activity_factor` (기본 1.38)
 - **운동 소모**: `MET × 3.5 × 체중 / 200 × 분` (2011 Compendium)
 - **수지**: `섭취 − (BMR + 운동 소모)` — 적자(−)면 초록, 흑자(+)면 핑크
-- **코치**: 오늘 자극 부위(하체/상체/코어/유산소, ‘전신’은 전부 커버) 분석 → 미자극 부위 상위 2개 추천,
-  전부 자극 시 회복(요가) 추천. 음식은 수지 부호 기준 추천 세트.

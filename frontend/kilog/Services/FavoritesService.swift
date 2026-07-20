@@ -36,6 +36,14 @@ enum FavoritesService {
             .execute().value
     }
 
+    /// 즐겨찾기 해제 (RLS로 본인 행만 삭제됨)
+    static func remove(kind: Kind, name: String) async throws {
+        try await Supa.client.from("favorite_entries").delete()
+            .eq("kind", value: kind.rawValue)
+            .eq("name", value: name)
+            .execute()
+    }
+
     /// upsert + use_count 증가. 실패해도 클립 저장 흐름을 막지 않도록 호출부에서 try? 사용.
     static func bump(
         kind: Kind, name: String, kcal: Int,
