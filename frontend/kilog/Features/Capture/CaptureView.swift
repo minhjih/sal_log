@@ -50,6 +50,17 @@ struct CaptureView: View {
     @State private var strengthReps = 10
     @State private var strengthSets = 3
 
+    // 한 세션에 여러 운동 담기 ("렛풀다운 + 벤치 + 스쿼트")
+    struct MoveEntry: Identifiable, Hashable {
+        let id = UUID()
+        var name: String
+        var kcal: Int
+        var minutes: Int
+        var part: String?
+        var isCustom: Bool
+    }
+    @State private var sessionMoves: [MoveEntry] = []
+
     /// 세트당 준비·휴식 포함 약 2.5분으로 환산해 MET 계산에 사용
     private var strengthMinutes: Int {
         max(5, Int((Double(strengthSets) * 2.5).rounded()))
@@ -580,7 +591,97 @@ struct CaptureView: View {
                 .padding(.horizontal, 14).padding(.vertical, 11)
                 .card(radius: 12)
             }
+
+            // 여러 운동 담기
+            Button {
+                addCurrentMove()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus.circle.fill").font(.system(size: 13))
+                    Text("이 운동 담기").font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(Theme.lover)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(Theme.lover.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.lover.opacity(0.4)))
+            }
+
+            if !sessionMoves.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(sessionMoves) { entry in
+                        HStack(spacing: 8) {
+                            Text(entry.name)
+                                .font(.system(size: 13, weight: .medium))
+                                .lineLimit(1)
+                            Spacer()
+                            Text("−\(entry.kcal)")
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(Theme.green)
+                            Button {
+                                sessionMoves.removeAll { $0.id == entry.id }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Theme.faint)
+                            }
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+                    }
+                    HStack {
+                        Text("\(sessionMoves.count)개 운동")
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                        Spacer()
+                        Text("합계 −\(sessionMoves.reduce(0) { $0 + $1.kcal }) kcal")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Theme.green)
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
         }
+    }
+
+    /// 현재 입력 상태(선택/직접/웨이트)를 MoveEntry로 변환. 유효하지 않으면 nil + error 세팅
+    private func currentMoveEntry() -> MoveEntry? {
+        if useCustomMove {
+            let name = customMoveName.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, let kcal = customMoveKcal, (0...5000).contains(kcal) else {
+                error = "직접 입력한 운동의 이름과 칼로리(0~5000)를 확인해 주세요."
+                return nil
+            }
+            return MoveEntry(name: String(name.prefix(20)), kcal: kcal,
+                             minutes: minutes, part: customMovePart, isCustom: true)
+        }
+        guard let m = selectedMove else { return nil }
+        if m.isStrength {
+            let kcal = HealthMath.metKcal(met: m.met, weightKg: app.myProfile?.weight,
+                                          minutes: strengthMinutes)
+            return MoveEntry(
+                name: "\(m.name) \(strengthWeight)kg×\(strengthReps)×\(strengthSets)세트",
+                kcal: kcal, minutes: strengthMinutes, part: m.bodyPart, isCustom: false
+            )
+        }
+        let kcal = HealthMath.metKcal(met: m.met, weightKg: app.myProfile?.weight,
+                                      minutes: minutes)
+        return MoveEntry(name: m.name, kcal: kcal, minutes: minutes,
+                         part: m.bodyPart, isCustom: false)
+    }
+
+    private func addCurrentMove() {
+        guard let entry = currentMoveEntry() else { return }
+        sessionMoves.append(entry)
+        error = nil
+        // 다음 운동 입력을 위해 직접 입력 필드만 초기화
+        if useCustomMove {
+            customMoveName = ""
+            customMoveKcal = nil
+        }
+        moveQuery = ""
     }
 
     /// 무게/횟수/세트 입력 셀 (± 버튼)
@@ -693,9 +794,11 @@ struct CaptureView: View {
         guard let group = app.group, let myId = app.myId else { return }
         saving = true; defer { saving = false }
 
-        var tag: ClipTag?
+        var tags: [ClipTag] = []
+        var customMoveEntries: [MoveEntry] = []
         switch tagMode {
-        case .none: tag = nil
+        case .none:
+            break
         case .food:
             if useCustomFood {
                 let name = customFoodName.trimmingCharacters(in: .whitespaces)
@@ -704,36 +807,24 @@ struct CaptureView: View {
                     saving = false
                     return
                 }
-                tag = .food(name: String(name.prefix(20)), kcal: kcal)
+                tags = [.food(name: String(name.prefix(20)), kcal: kcal)]
             } else if let f = selectedFood {
-                tag = .food(name: f.name, kcal: f.kcal)
+                tags = [.food(name: f.name, kcal: f.kcal)]
             }
         case .move:
-            if useCustomMove {
-                let name = customMoveName.trimmingCharacters(in: .whitespaces)
-                guard !name.isEmpty, let kcal = customMoveKcal, (0...5000).contains(kcal) else {
-                    error = "직접 입력한 운동의 이름과 칼로리(0~5000)를 확인해 주세요."
+            // 담아둔 운동들이 있으면 전부, 없으면 현재 입력 하나로
+            var entries = sessionMoves
+            if entries.isEmpty {
+                guard let single = currentMoveEntry() else {
                     saving = false
                     return
                 }
-                tag = .move(name: String(name.prefix(20)), kcal: kcal,
-                            minutes: minutes, part: customMovePart)
-            } else if let m = selectedMove {
-                if m.isStrength {
-                    // 웨이트류: 무게×횟수×세트를 이름에 담고, 시간은 세트 기준 환산
-                    let kcal = HealthMath.metKcal(met: m.met,
-                                                  weightKg: app.myProfile?.weight,
-                                                  minutes: strengthMinutes)
-                    let detail = "\(m.name) \(strengthWeight)kg×\(strengthReps)×\(strengthSets)세트"
-                    tag = .move(name: detail, kcal: kcal,
-                                minutes: strengthMinutes, part: m.bodyPart)
-                } else {
-                    let kcal = HealthMath.metKcal(met: m.met,
-                                                  weightKg: app.myProfile?.weight,
-                                                  minutes: minutes)
-                    tag = .move(name: m.name, kcal: kcal, minutes: minutes, part: m.bodyPart)
-                }
+                entries = [single]
             }
+            tags = entries.map {
+                .move(name: $0.name, kcal: $0.kcal, minutes: $0.minutes, part: $0.part)
+            }
+            customMoveEntries = entries.filter(\.isCustom)
         }
 
         // "영상 시간"은 오늘 날짜 + 선택한 시각으로
@@ -743,8 +834,12 @@ struct CaptureView: View {
             bySettingHour: hm.hour ?? 0, minute: hm.minute ?? 0, second: 0, of: Date()
         ) ?? Date()
 
+        let defaultCaption: String = {
+            guard let first = tags.first else { return "지금 이 순간" }
+            return tags.count > 1 ? "\(first.name) 외 \(tags.count - 1)" : first.name
+        }()
         let finalCaption = caption.trimmingCharacters(in: .whitespaces).isEmpty
-            ? (tag?.name ?? "지금 이 순간")
+            ? defaultCaption
             : caption.trimmingCharacters(in: .whitespaces)
 
         do {
@@ -753,15 +848,16 @@ struct CaptureView: View {
                 videoFileURL: videoURL,
                 caption: finalCaption,
                 recordedAt: takenAt,
-                tag: tag
+                tags: tags
             )
             // 직접 입력한 항목은 즐겨찾기에 자동 등록/카운트 증가 (실패해도 무시)
-            if case .food(let name, let kcal) = tag, useCustomFood {
+            if case .food(let name, let kcal)? = tags.first, useCustomFood {
                 try? await FavoritesService.bump(kind: .food, name: name, kcal: kcal)
             }
-            if case .move(let name, let kcal, let mins, let part) = tag, useCustomMove {
-                try? await FavoritesService.bump(kind: .workout, name: name, kcal: kcal,
-                                                 minutes: mins, bodyPart: part)
+            for entry in customMoveEntries {
+                try? await FavoritesService.bump(kind: .workout, name: entry.name,
+                                                 kcal: entry.kcal, minutes: entry.minutes,
+                                                 bodyPart: entry.part)
             }
 
             await app.reloadFeed()
