@@ -94,3 +94,14 @@ enum SupabaseConfig {
   클립 업로드 전 압축(H.264, 720p면 충분)을 유지하고, 필요 시 Pro($25/월)로
 - **초대 도메인**: `kilog.app` 도메인을 실제로 사면 Universal Link를 붙여 웹 초대 → 앱 자동 열기가 가능.
   그 전까지는 앱에서 "초대 코드 입력"으로 동일하게 동작
+
+## 7. 클립 자동 정리 (7일 보존)
+
+`20260720000700` 마이그레이션이 매일 03:17(UTC)에 7일 지난 클립의 영상 파일과
+클립 행을 삭제하는 `purge_expired_clips()`를 pg_cron으로 등록합니다.
+식사/운동 기록은 보존되므로 칼로리 통계는 유지돼요.
+
+- pg_cron이 자동 활성화되지 않았다면: 대시보드 → **Database → Extensions**에서
+  `pg_cron` 검색 → Enable 후 마이그레이션을 다시 push (또는 SQL Editor에서 do 블록만 재실행)
+- 등록 확인: SQL Editor에서 `select * from cron.job;`
+- 수동 실행: `select public.purge_expired_clips(7);`

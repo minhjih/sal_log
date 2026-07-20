@@ -15,6 +15,8 @@ final class CameraModel: NSObject, ObservableObject {
     private let output = AVCaptureMovieFileOutput()
     private var timer: Timer?
     private let sessionQueue = DispatchQueue(label: "kilog.camera")
+    /// 기기 기울기에 맞는 영상 회전각 제공 — 가로로 찍으면 가로 영상으로 저장됨
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
 
     /// Info.plist에 권한 문구가 없는 상태로 장치에 접근하면 iOS가 앱을 즉시
     /// 종료시키므로(TCC 크래시), 문구 존재 여부를 먼저 확인한다.
@@ -53,6 +55,11 @@ final class CameraModel: NSObject, ObservableObject {
                 return
             }
             session.addInput(videoInput)
+            Task { @MainActor in
+                self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                    device: camera, previewLayer: nil
+                )
+            }
 
             // 마이크는 권한 문구가 있을 때만 붙인다 — 없으면 무음 녹화로 진행
             // (NSMicrophoneUsageDescription 누락 시 여기서 TCC 크래시가 났었음)
@@ -83,6 +90,15 @@ final class CameraModel: NSObject, ObservableObject {
 
     func startRecording() {
         guard !isRecording, session.isRunning else { return }
+
+        // 녹화 시작 시점의 기기 방향을 영상 회전 메타데이터에 반영
+        if let connection = output.connection(with: .video) {
+            let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
+        }
+
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("clip-\(UUID().uuidString).mp4")
         output.startRecording(to: url, recordingDelegate: self)

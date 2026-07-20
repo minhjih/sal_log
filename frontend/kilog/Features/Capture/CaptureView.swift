@@ -34,6 +34,8 @@ struct CaptureView: View {
         case move = "움직였어요"
     }
 
+    @State private var isLandscape = UIDevice.current.orientation.isLandscape
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -93,9 +95,34 @@ struct CaptureView: View {
                         .background(.black.opacity(0.4))
                         .clipShape(Capsule())
 
+                    // 가로 촬영 유도 — 브이로그 화면비 힌트
+                    if !camera.isRecording {
+                        HStack(spacing: 6) {
+                            Image(systemName: isLandscape ? "checkmark.circle.fill" : "rotate.right")
+                                .font(.system(size: 12, weight: .bold))
+                            Text(isLandscape ? "가로 모드 — 브이로그 화면비!" : "폰을 가로로 눕혀 찍어보세요")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(isLandscape ? Theme.green : .white)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(isLandscape ? Color.black.opacity(0.4) : Theme.me.opacity(0.75))
+                        .clipShape(Capsule())
+                        .animation(.easeInOut(duration: 0.2), value: isLandscape)
+                    }
+
                     Spacer()
                 }
                 .padding(.top, 56)
+                .onAppear {
+                    UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                }
+                .onReceive(NotificationCenter.default.publisher(
+                    for: UIDevice.orientationDidChangeNotification)) { _ in
+                    let orientation = UIDevice.current.orientation
+                    if orientation.isValidInterfaceOrientation {
+                        isLandscape = orientation.isLandscape
+                    }
+                }
             }
 
             // 하단 바
