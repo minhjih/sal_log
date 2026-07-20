@@ -289,9 +289,18 @@ struct ExerciseItem: Codable, Identifiable, Hashable {
     var name: String
     var met: Double
     var bodyPart: String
+    /// "time"(분 슬라이더) | "strength"(무게×횟수×세트)
+    var mode: String?
+
+    var isStrength: Bool { mode == "strength" }
+
+    init(id: Int, name: String, met: Double, bodyPart: String, mode: String? = nil) {
+        self.id = id; self.name = name; self.met = met
+        self.bodyPart = bodyPart; self.mode = mode
+    }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, met
+        case id, name, met, mode
         case bodyPart = "body_part"
     }
 }

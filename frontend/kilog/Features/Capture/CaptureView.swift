@@ -45,6 +45,16 @@ struct CaptureView: View {
     @State private var customMoveKcal: Int?
     @State private var customMovePart = "전신"
 
+    // 웨이트류(strength) 입력: 무게 × 횟수 × 세트
+    @State private var strengthWeight = 40
+    @State private var strengthReps = 10
+    @State private var strengthSets = 3
+
+    /// 세트당 준비·휴식 포함 약 2.5분으로 환산해 MET 계산에 사용
+    private var strengthMinutes: Int {
+        max(5, Int((Double(strengthSets) * 2.5).rounded()))
+    }
+
     // 개인 즐겨찾기 (직접 입력 이력, 자주 쓴 순)
     @State private var foodFavorites: [FavoriteEntry] = []
     @State private var workoutFavorites: [FavoriteEntry] = []
@@ -209,9 +219,21 @@ struct CaptureView: View {
             if let videoURL {
                 LoopingPlayerView(url: videoURL)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: 140)
             }
 
-            VStack(spacing: 12) {
+            // 키보드가 올라와도 전체 항목에 접근할 수 있게 패널 자체를 스크롤
+            ScrollView {
+                metaPanel
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Theme.bg)
+        }
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private var metaPanel: some View {
+        VStack(spacing: 12) {
                 HStack(spacing: 10) {
                     TextField("한 줄 캡션 (선택)", text: $caption)
                         .padding(12)
@@ -272,9 +294,6 @@ struct CaptureView: View {
             }
             .padding(16)
             .padding(.bottom, 22)
-            .background(Theme.bg)
-        }
-        .ignoresSafeArea(edges: .top)
     }
 
     private var foodPicker: some View {
@@ -418,7 +437,7 @@ struct CaptureView: View {
                     }
                 }
             }
-            .frame(maxHeight: 210)
+            .frame(height: 200)   // 고정 높이 — 키보드가 올라와도 리스트가 사라지지 않음
 
             // 목록에 없는 운동: 직접 입력
             Button {
@@ -484,26 +503,43 @@ struct CaptureView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HStack(spacing: 12) {
-                Slider(value: .init(
-                    get: { Double(minutes) },
-                    set: { minutes = Int($0 / 5) * 5 }
-                ), in: 5...120)
-                .tint(Theme.green)
-                Text("\(minutes)분")
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(width: 44, alignment: .trailing)
+            // 운동 유형별 입력 — 유산소류는 시간, 웨이트류는 무게×횟수×세트
+            let isStrength = !useCustomMove && (selectedMove?.isStrength ?? false)
+
+            if !isStrength {
+                HStack(spacing: 12) {
+                    Slider(value: .init(
+                        get: { Double(minutes) },
+                        set: { minutes = Int($0 / 5) * 5 }
+                    ), in: 5...120)
+                    .tint(Theme.green)
+                    Text("\(minutes)분")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 44, alignment: .trailing)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    strengthStepper("무게", value: $strengthWeight,
+                                    range: 0...300, step: 5, unit: "kg")
+                    strengthStepper("횟수", value: $strengthReps,
+                                    range: 1...50, step: 1, unit: "회")
+                    strengthStepper("세트", value: $strengthSets,
+                                    range: 1...15, step: 1, unit: "세트")
+                }
             }
 
             if !useCustomMove, let move = selectedMove {
+                let effectiveMinutes = isStrength ? strengthMinutes : minutes
                 let kcal = HealthMath.metKcal(met: move.met,
                                               weightKg: app.myProfile?.weight,
-                                              minutes: minutes)
+                                              minutes: effectiveMinutes)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("−\(kcal) kcal 자동 계산")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Theme.green)
-                    Text("MET \(move.met, specifier: "%.1f") × \(Int(app.myProfile?.weight ?? 60))kg × \(minutes)분 · Compendium 기반")
+                    Text(isStrength
+                         ? "\(strengthWeight)kg × \(strengthReps)회 × \(strengthSets)세트 · 세트당 약 2.5분 환산"
+                         : "MET \(move.met, specifier: "%.1f") × \(Int(app.myProfile?.weight ?? 60))kg × \(minutes)분 · Compendium 기반")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                 }
@@ -512,6 +548,41 @@ struct CaptureView: View {
                 .card(radius: 12)
             }
         }
+    }
+
+    /// 무게/횟수/세트 입력 셀 (± 버튼)
+    private func strengthStepper(
+        _ label: String, value: Binding<Int>,
+        range: ClosedRange<Int>, step: Int, unit: String
+    ) -> some View {
+        VStack(spacing: 6) {
+            Text(label).font(.system(size: 10.5)).foregroundStyle(Theme.muted)
+            HStack(spacing: 0) {
+                Button {
+                    value.wrappedValue = max(range.lowerBound, value.wrappedValue - step)
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 26, height: 30)
+                }
+                Text("\(value.wrappedValue)")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(minWidth: 34)
+                Button {
+                    value.wrappedValue = min(range.upperBound, value.wrappedValue + step)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(width: 26, height: 30)
+                }
+            }
+            .foregroundStyle(Theme.text)
+            .background(Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+            Text(unit).font(.system(size: 9.5)).foregroundStyle(Theme.faint)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// 운동 리스트 행 — 이름·부위·현재 시간 기준 예상 칼로리
@@ -615,10 +686,20 @@ struct CaptureView: View {
                 tag = .move(name: String(name.prefix(20)), kcal: kcal,
                             minutes: minutes, part: customMovePart)
             } else if let m = selectedMove {
-                let kcal = HealthMath.metKcal(met: m.met,
-                                              weightKg: app.myProfile?.weight,
-                                              minutes: minutes)
-                tag = .move(name: m.name, kcal: kcal, minutes: minutes, part: m.bodyPart)
+                if m.isStrength {
+                    // 웨이트류: 무게×횟수×세트를 이름에 담고, 시간은 세트 기준 환산
+                    let kcal = HealthMath.metKcal(met: m.met,
+                                                  weightKg: app.myProfile?.weight,
+                                                  minutes: strengthMinutes)
+                    let detail = "\(m.name) \(strengthWeight)kg×\(strengthReps)×\(strengthSets)세트"
+                    tag = .move(name: detail, kcal: kcal,
+                                minutes: strengthMinutes, part: m.bodyPart)
+                } else {
+                    let kcal = HealthMath.metKcal(met: m.met,
+                                                  weightKg: app.myProfile?.weight,
+                                                  minutes: minutes)
+                    tag = .move(name: m.name, kcal: kcal, minutes: minutes, part: m.bodyPart)
+                }
             }
         }
 
