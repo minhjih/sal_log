@@ -34,8 +34,6 @@ struct CaptureView: View {
         case move = "움직였어요"
     }
 
-    @State private var isLandscape = UIDevice.current.orientation.isLandscape
-
     // 목록에 없는 음식 직접 입력
     @State private var useCustomFood = false
     @State private var customFoodName = ""
@@ -109,56 +107,37 @@ struct CaptureView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                VStack(spacing: 6) {
-                    Text(Date(), format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute())
-                        .font(.system(size: 26, weight: .bold))
-                        .kerning(1)
-                        .shadow(color: .black.opacity(0.6), radius: 10)
+                // 가로 촬영이 디폴트 — HUD 자체를 가로 방향으로 눕혀서
+                // 자연스럽게 폰을 돌려 찍게 한다 (폰을 왼쪽으로 눕히면 글이 바로 보임)
+                HStack {
+                    VStack(spacing: 8) {
+                        Text(Date(), format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+                            .font(.system(size: 26, weight: .bold))
+                            .kerning(1)
+                            .shadow(color: .black.opacity(0.6), radius: 10)
 
-                    Text(camera.isRecording
-                         ? String(format: "● %.1fs / %.0fs", camera.elapsed, Timeline.maxClipSec)
-                         : "버튼을 꾹 누르는 동안 찍혀요 · 최대 5초")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 12).padding(.vertical, 4)
-                        .background(.black.opacity(0.4))
-                        .clipShape(Capsule())
-
-                    // 가로 촬영 유도 — 브이로그 화면비 힌트
-                    if !camera.isRecording {
-                        HStack(spacing: 6) {
-                            Image(systemName: isLandscape ? "checkmark.circle.fill" : "rotate.right")
-                                .font(.system(size: 12, weight: .bold))
-                            Text(isLandscape ? "가로 모드 — 브이로그 화면비!" : "폰을 가로로 눕혀 찍어보세요")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundStyle(isLandscape ? Theme.green : .white)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(isLandscape ? Color.black.opacity(0.4) : Theme.me.opacity(0.75))
-                        .clipShape(Capsule())
-                        .animation(.easeInOut(duration: 0.2), value: isLandscape)
+                        Text(camera.isRecording
+                             ? String(format: "● %.1fs / %.0fs", camera.elapsed, Timeline.maxClipSec)
+                             : "폰을 눕혀서, 버튼을 꾹 누르는 동안 촬영 · 최대 5초")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(.black.opacity(0.45))
+                            .clipShape(Capsule())
                     }
-
+                    .fixedSize()
+                    .rotationEffect(.degrees(90))
                     Spacer()
                 }
-                .padding(.top, 56)
-                .onAppear {
-                    UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-                }
-                .onReceive(NotificationCenter.default.publisher(
-                    for: UIDevice.orientationDidChangeNotification)) { _ in
-                    let orientation = UIDevice.current.orientation
-                    if orientation.isValidInterfaceOrientation {
-                        isLandscape = orientation.isLandscape
-                    }
-                }
+                .padding(.leading, 6)
             }
 
-            // 하단 바
+            // 하단 바 (가로로 들었을 때 읽히도록 라벨도 눕힘)
             HStack {
                 PhotosPicker(selection: $pickedItem, matching: .videos) {
                     Text("올리기")
                         .font(.system(size: 14, weight: .semibold))
+                        .rotationEffect(.degrees(90))
                         .frame(width: 56)
                 }
 
@@ -204,9 +183,14 @@ struct CaptureView: View {
 
                 Spacer()
 
-                Button("취소") { dismiss() }
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 56)
+                Button {
+                    dismiss()
+                } label: {
+                    Text("취소")
+                        .font(.system(size: 14, weight: .semibold))
+                        .rotationEffect(.degrees(90))
+                        .frame(width: 56)
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 34)
@@ -663,14 +647,15 @@ struct PickedMovie: Transferable {
     }
 }
 
-/// 무음 루프 미리보기 플레이어
+/// 무음 루프 미리보기 플레이어 — 크롭 없이 전체 프레임을 보여줌 (가로 영상 확인용)
 struct LoopingPlayerView: View {
     let url: URL
     @State private var player = AVQueuePlayer()
     @State private var looper: AVPlayerLooper?
 
     var body: some View {
-        PlayerLayerView(player: player)
+        PlayerLayerView(player: player, gravity: .resizeAspect)
+            .background(Color.black)
             .onAppear {
                 let item = AVPlayerItem(url: url)
                 looper = AVPlayerLooper(player: player, templateItem: item)
