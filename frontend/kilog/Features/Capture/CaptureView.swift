@@ -51,6 +51,18 @@ struct CaptureView: View {
     @State private var foodFavorites: [FavoriteEntry] = []
     @State private var workoutFavorites: [FavoriteEntry] = []
 
+    // 운동 검색 (Compendium 기반 카탈로그 ~100종)
+    @State private var moveQuery = ""
+
+    private var filteredExercises: [ExerciseItem] {
+        let query = moveQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return catalogs.exercises }
+        return catalogs.exercises.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.bodyPart.localizedCaseInsensitiveContains(query)
+        }
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -355,16 +367,48 @@ struct CaptureView: View {
                 }
             }
 
-            ScrollView {
-                FlowChips(items: catalogs.exercises,
-                          isOn: { $0.id == selectedMove?.id && !useCustomMove }) { item in
-                    selectedMove = item
-                    useCustomMove = false
-                } label: { item in
-                    (item.name, item.bodyPart)
+            // 검색 — 운동 이름 또는 부위(하체/유산소…)로
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.faint)
+                TextField("운동 검색 (예: 바레, 수영, 하체)", text: $moveQuery)
+                    .font(.system(size: 14))
+                if !moveQuery.isEmpty {
+                    Button {
+                        moveQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Theme.faint)
+                    }
                 }
             }
-            .frame(maxHeight: 112)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Theme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 11))
+            .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+
+            ScrollView {
+                if filteredExercises.isEmpty {
+                    Text("'\(moveQuery)' 검색 결과가 없어요.\n아래 직접 입력으로 기록해 주세요.")
+                        .font(.system(size: 12))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                } else {
+                    FlowChips(items: filteredExercises,
+                              isOn: { $0.id == selectedMove?.id && !useCustomMove }) { item in
+                        selectedMove = item
+                        useCustomMove = false
+                    } label: { item in
+                        (item.name, item.bodyPart)
+                    }
+                }
+            }
+            .frame(maxHeight: 140)
 
             // 목록에 없는 운동: 직접 입력
             Button {

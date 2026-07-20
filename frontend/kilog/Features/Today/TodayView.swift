@@ -33,6 +33,7 @@ struct TodayView: View {
         .refreshable { await app.reloadFeed() }
         .onAppear { syncTheater() }
         .onChange(of: app.feed.clips) { syncTheater() }
+        .onChange(of: app.videoCache) { syncTheater() }
         .onDisappear { if theater.playing { theater.togglePlay() } }
         .confirmationDialog(
             "이 클립을 삭제할까요?",
@@ -128,7 +129,8 @@ struct TodayView: View {
         theater.update(
             clips: app.feed.clips,
             topUserId: app.myId,
-            bottomUserId: app.partner?.userId
+            bottomUserId: app.partner?.userId,
+            localFiles: app.videoCache
         )
     }
 

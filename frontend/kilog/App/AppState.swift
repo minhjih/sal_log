@@ -27,6 +27,11 @@ final class AppState: ObservableObject {
     @Published var needsOnboardingScan = false
     @Published var errorMessage: String?
 
+    /// 스플래시 진행률 (0~1) — 부트스트랩 → 피드 → 영상 프리로드
+    @Published var launchProgress: Double = 0
+    /// clipId → 로컬 캐시 파일. 스플래시에서 미리 받아 즉시 재생·내보내기에 사용
+    @Published var videoCache: [UUID: URL] = [:]
+
     let catalogs = Catalogs()
     private var realtimeChannel: RealtimeChannelV2?
     private var authTask: Task<Void, Never>?
@@ -78,13 +83,25 @@ final class AppState: ObservableObject {
             members = boot.members
             invite = boot.invite
 
+            launchProgress = 0.25
             if boot.group == nil {
                 phase = .needsGroup
             } else {
-                phase = .ready
                 // 신체 수치가 아직 없으면 온보딩 스캔 유도
                 needsOnboardingScan = (boot.profile?.weight == nil)
-                await reloadFeed()
+
+                if phase != .ready {
+                    // 첫 진입: 스플래시를 유지한 채 피드 + 영상까지 프리로드
+                    await reloadFeed()
+                    launchProgress = 0.4
+                    await preloadVideos { [weak self] fraction in
+                        self?.launchProgress = 0.4 + 0.6 * fraction
+                    }
+                    launchProgress = 1
+                } else {
+                    await reloadFeed()
+                }
+                phase = .ready
                 await subscribeRealtime()
             }
         } catch {
@@ -100,8 +117,25 @@ final class AppState: ObservableObject {
         guard let group else { return }
         do {
             feed = try await ClipService.fetchDay(groupId: group.id, date: date)
+            // 실시간으로 새로 올라온 클립은 백그라운드에서 캐시
+            Task { await self.preloadVideos(onProgress: nil) }
         } catch {
             errorMessage = "오늘 기록을 불러오지 못했어요."
+        }
+    }
+
+    /// 오늘 피드의 영상들을 로컬 캐시로 다운로드
+    private func preloadVideos(onProgress: ((Double) -> Void)?) async {
+        let pending = feed.clips.filter {
+            $0.clip.videoKey != nil && videoCache[$0.id] == nil
+        }
+        guard !pending.isEmpty else { onProgress?(1); return }
+
+        for (index, clip) in pending.enumerated() {
+            if let local = try? await ClipService.cachedVideoURL(for: clip.clip) {
+                videoCache[clip.id] = local
+            }
+            onProgress?(Double(index + 1) / Double(pending.count))
         }
     }
 

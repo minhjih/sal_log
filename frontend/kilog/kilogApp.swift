@@ -38,8 +38,7 @@ struct RootView: View {
 
             switch app.phase {
             case .loading:
-                ProgressView()
-                    .tint(Theme.me)
+                LaunchView(progress: app.launchProgress)
             case .signedOut:
                 AuthFlowView()
             case .needsGroup:

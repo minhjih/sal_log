@@ -149,6 +149,27 @@ enum ClipService {
             .eq("id", value: clip.id).execute()
     }
 
+    // ── 영상 로컬 캐시 (스플래시 프리로딩·즉시 재생용) ──────
+    private static var cacheDir: URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("clip-videos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// 클립 영상을 캐시 디렉터리에 내려받고 로컬 URL 반환. 이미 있으면 재사용.
+    static func cachedVideoURL(for clip: Clip) async throws -> URL? {
+        guard let key = clip.videoKey else { return nil }
+        let local = cacheDir.appendingPathComponent("\(clip.id.uuidString).mp4")
+        if FileManager.default.fileExists(atPath: local.path) { return local }
+
+        let signed = try await signedVideoURL(for: key)
+        let (tmp, _) = try await URLSession.shared.download(from: signed)
+        try? FileManager.default.removeItem(at: local)
+        try FileManager.default.moveItem(at: tmp, to: local)
+        return local
+    }
+
     // ── signed URL (재생용) — 만료 10분 전까지 캐시 ─────────
     private static var urlCache: [String: (url: URL, expiry: Date)] = [:]
     private static let cacheLock = NSLock()

@@ -127,16 +127,18 @@ struct ExportView: View {
         player = nil
 
         do {
-            // 1) 영상 클립 로컬 다운로드 + 길이 측정
+            // 1) 영상 클립 준비 — 스플래시에서 받아둔 캐시를 우선 사용
             var localFiles: [UUID: URL] = [:]
             var durations: [UUID: Double] = [:]
             for clip in clips {
-                guard let key = clip.clip.videoKey else { continue }
-                let signed = try await ClipService.signedVideoURL(for: key)
-                let (data, _) = try await URLSession.shared.data(from: signed)
-                let local = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("export-\(clip.id.uuidString).mp4")
-                try data.write(to: local)
+                guard clip.clip.videoKey != nil else { continue }
+                let local: URL?
+                if let cached = app.videoCache[clip.id] {
+                    local = cached
+                } else {
+                    local = try? await ClipService.cachedVideoURL(for: clip.clip)
+                }
+                guard let local else { continue }
                 localFiles[clip.id] = local
                 let asset = AVURLAsset(url: local)
                 if let sec = try? await asset.load(.duration).seconds,
