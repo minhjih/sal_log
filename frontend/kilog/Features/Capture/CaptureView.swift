@@ -220,38 +220,47 @@ struct CaptureView: View {
     }
 
     // ── 2) 메타 입력 ──────────────────────────────────────
-    // 촬영 확인: 영상은 뒤에 전체화면, 입력은 드래그 시트(반절↔전체)로
+    // 촬영 확인: 영상은 화면 상단에 고정, 입력 시트가 아래를 덮는다.
+    // 시트를 위로 쓸어올리면 영상까지 덮이며 입력에 집중하는 구조.
     private var metaStage: some View {
-        ZStack(alignment: .topTrailing) {
-            if let videoURL {
-                LoopingPlayerView(url: videoURL)
-                    .ignoresSafeArea()
+        GeometryReader { geo in
+            ZStack(alignment: .topTrailing) {
+                Color.black.ignoresSafeArea()
+
+                if let videoURL {
+                    LoopingPlayerView(url: videoURL)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: geo.size.height * 0.42)
+                        .padding(.top, 44)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(.black.opacity(0.5))
+                        .clipShape(Circle())
+                }
+                .padding(.top, 54)
+                .padding(.trailing, 18)
             }
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(.black.opacity(0.5))
-                    .clipShape(Circle())
-            }
-            .padding(.top, 54)
-            .padding(.trailing, 18)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// 인스타 댓글처럼 위로 쓸면 전체화면, 아래로 내리면 반절로 줄어드는 입력 시트
+    /// 인스타 댓글식 입력 시트 — 처음엔 상단 영상이 보이는 높이,
+    /// 위로 쓸면 전체화면(영상이 가려짐), 내리면 다시 원위치
     private var tagSheet: some View {
         ScrollView {
             metaPanel
         }
         .scrollDismissesKeyboard(.interactively)
-        .presentationDetents([.fraction(0.5), .large])
+        .presentationDetents([.fraction(0.52), .large])
         .presentationDragIndicator(.visible)
-        .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.5)))
+        .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.52)))
         .presentationBackground(Theme.bg)
         .interactiveDismissDisabled()
     }
