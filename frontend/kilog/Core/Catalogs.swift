@@ -74,6 +74,7 @@ final class Catalogs: ObservableObject {
         .init(id: 16, name: "홈트 (맨몸)", met: 3.8, bodyPart: "전신"),
         .init(id: 17, name: "플랭크·복근", met: 3.8, bodyPart: "코어"),
         .init(id: 18, name: "배드민턴", met: 5.5, bodyPart: "전신"),
+        .init(id: 19, name: "바레", met: 4.0, bodyPart: "하체"),
     ]
 
     static let fallbackFoods: [FoodItem] = [

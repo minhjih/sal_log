@@ -41,6 +41,16 @@ struct CaptureView: View {
     @State private var customFoodName = ""
     @State private var customFoodKcal: Int?
 
+    // 목록에 없는 운동 직접 입력
+    @State private var useCustomMove = false
+    @State private var customMoveName = ""
+    @State private var customMoveKcal: Int?
+    @State private var customMovePart = "전신"
+
+    // 개인 즐겨찾기 (직접 입력 이력, 자주 쓴 순)
+    @State private var foodFavorites: [FavoriteEntry] = []
+    @State private var workoutFavorites: [FavoriteEntry] = []
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -53,6 +63,8 @@ struct CaptureView: View {
             await camera.configure()
             selectedFood = catalogs.foods.first
             selectedMove = catalogs.exercises.first { $0.name == "러닝 8km/h" } ?? catalogs.exercises.first
+            foodFavorites = (try? await FavoritesService.fetch(kind: .food)) ?? []
+            workoutFavorites = (try? await FavoritesService.fetch(kind: .workout)) ?? []
         }
         .onDisappear { camera.stop() }
         .onChange(of: camera.recordedURL) {
@@ -268,6 +280,15 @@ struct CaptureView: View {
 
     private var foodPicker: some View {
         VStack(spacing: 10) {
+            // 내 즐겨찾기 — 직접 입력 이력, 자주 쓴 순
+            if !foodFavorites.isEmpty {
+                favoritesRow(foodFavorites) { fav in
+                    useCustomFood = true
+                    customFoodName = fav.name
+                    customFoodKcal = fav.kcal
+                }
+            }
+
             FlowChips(items: catalogs.foods,
                       isOn: { $0.id == selectedFood?.id && !useCustomFood }) { item in
                 selectedFood = item
@@ -323,14 +344,91 @@ struct CaptureView: View {
 
     private var movePicker: some View {
         VStack(spacing: 10) {
+            // 내 즐겨찾기 — 직접 입력 이력, 자주 쓴 순
+            if !workoutFavorites.isEmpty {
+                favoritesRow(workoutFavorites) { fav in
+                    useCustomMove = true
+                    customMoveName = fav.name
+                    customMoveKcal = fav.kcal
+                    customMovePart = fav.bodyPart ?? "전신"
+                    if let m = fav.minutes { minutes = m }
+                }
+            }
+
             ScrollView {
-                FlowChips(items: catalogs.exercises, isOn: { $0.id == selectedMove?.id }) { item in
+                FlowChips(items: catalogs.exercises,
+                          isOn: { $0.id == selectedMove?.id && !useCustomMove }) { item in
                     selectedMove = item
+                    useCustomMove = false
                 } label: { item in
                     (item.name, item.bodyPart)
                 }
             }
             .frame(maxHeight: 112)
+
+            // 목록에 없는 운동: 직접 입력
+            Button {
+                useCustomMove.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: useCustomMove ? "checkmark" : "plus")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("목록에 없어요 — 직접 입력")
+                        .font(.system(size: 13, weight: useCustomMove ? .semibold : .regular))
+                }
+                .foregroundStyle(useCustomMove ? Theme.text : Theme.muted)
+                .padding(.horizontal, 13).padding(.vertical, 7)
+                .background(useCustomMove ? Theme.surface2 : Theme.surface)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(useCustomMove ? Theme.text : Theme.line))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if useCustomMove {
+                HStack(spacing: 8) {
+                    TextField("운동 이름 (예: 폴댄스)", text: $customMoveName)
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+
+                    HStack(spacing: 4) {
+                        TextField("kcal", value: $customMoveKcal, format: .number)
+                            .keyboardType(.numberPad)
+                            .frame(width: 56)
+                        Text("kcal").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Theme.line))
+                }
+
+                // 자극 부위 선택 (코치 분석에 사용)
+                HStack(spacing: 7) {
+                    ForEach(Catalogs.parts + ["전신"], id: \.self) { part in
+                        Button {
+                            customMovePart = part
+                        } label: {
+                            Text(part)
+                                .font(.system(size: 12, weight: customMovePart == part ? .bold : .regular))
+                                .foregroundStyle(customMovePart == part ? Color(hex: "#14060C") : Theme.faint)
+                                .padding(.horizontal, 11).padding(.vertical, 6)
+                                .background(customMovePart == part
+                                            ? AnyShapeStyle(Theme.duo) : AnyShapeStyle(.clear))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(
+                                    customMovePart == part ? .clear : Theme.line))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("소모 칼로리는 대략이면 돼요. 30분 기준 가볍게 100~150, 땀나게 200~300kcal 정도예요.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.faint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             HStack(spacing: 12) {
                 Slider(value: .init(
@@ -343,7 +441,7 @@ struct CaptureView: View {
                     .frame(width: 44, alignment: .trailing)
             }
 
-            if let move = selectedMove {
+            if !useCustomMove, let move = selectedMove {
                 let kcal = HealthMath.metKcal(met: move.met,
                                               weightKg: app.myProfile?.weight,
                                               minutes: minutes)
@@ -358,6 +456,41 @@ struct CaptureView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14).padding(.vertical, 11)
                 .card(radius: 12)
+            }
+        }
+    }
+
+    /// 즐겨찾기 칩 한 줄 (음식/운동 공용)
+    private func favoritesRow(
+        _ favorites: [FavoriteEntry], onPick: @escaping (FavoriteEntry) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("내 즐겨찾기")
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(Theme.lover)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(favorites) { fav in
+                        Button {
+                            onPick(fav)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Theme.lover)
+                                Text(fav.name).font(.system(size: 13))
+                                Text("\(fav.kcal)")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Theme.surface)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Theme.lover.opacity(0.4)))
+                        }
+                        .foregroundStyle(Theme.text)
+                    }
+                }
             }
         }
     }
@@ -383,7 +516,16 @@ struct CaptureView: View {
                 tag = .food(name: f.name, kcal: f.kcal)
             }
         case .move:
-            if let m = selectedMove {
+            if useCustomMove {
+                let name = customMoveName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty, let kcal = customMoveKcal, (0...5000).contains(kcal) else {
+                    error = "직접 입력한 운동의 이름과 칼로리(0~5000)를 확인해 주세요."
+                    saving = false
+                    return
+                }
+                tag = .move(name: String(name.prefix(20)), kcal: kcal,
+                            minutes: minutes, part: customMovePart)
+            } else if let m = selectedMove {
                 let kcal = HealthMath.metKcal(met: m.met,
                                               weightKg: app.myProfile?.weight,
                                               minutes: minutes)
@@ -410,6 +552,15 @@ struct CaptureView: View {
                 recordedAt: takenAt,
                 tag: tag
             )
+            // 직접 입력한 항목은 즐겨찾기에 자동 등록/카운트 증가 (실패해도 무시)
+            if case .food(let name, let kcal) = tag, useCustomFood {
+                try? await FavoritesService.bump(kind: .food, name: name, kcal: kcal)
+            }
+            if case .move(let name, let kcal, let mins, let part) = tag, useCustomMove {
+                try? await FavoritesService.bump(kind: .workout, name: name, kcal: kcal,
+                                                 minutes: mins, bodyPart: part)
+            }
+
             await app.reloadFeed()
             dismiss()
         } catch {
