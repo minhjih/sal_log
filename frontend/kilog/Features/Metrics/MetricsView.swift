@@ -3,12 +3,10 @@ import Charts
 import Foundation
 
 /// 지표 탭: 서로의 건강 지표를 확인·비교
+///  · 인체 모형 근육 부하 비교 (최근 7일)
 ///  · 변화 그래프 (체지방률/골격근량/체중 토글)
-///  · 데이 스트레이크 (운동·식단 기록 연속 일수)
-///  · 인체 모형 부위 비교 (최근 7일 운동 부위별 강도)
 struct MetricsView: View {
     @EnvironmentObject private var app: AppState
-    @State private var recentLogs = ClipService.RecentLogs(foods: [], workouts: [])
 
     var body: some View {
         ScrollView {
@@ -22,11 +20,9 @@ struct MetricsView: View {
                 }
                 .padding(.horizontal, 2)
 
-                TrendChartCard()
-
-                StreakCard(logs: recentLogs)
-
                 PartComparisonCard(workouts: recentWeekWorkouts)
+
+                TrendChartCard()
 
                 Text("파트너의 기록은 공유 설정(운동·식단)에 동의한 범위까지만 보여요.")
                     .font(.system(size: 11))
@@ -36,8 +32,7 @@ struct MetricsView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 24)
         }
-        .task { await load() }
-        .refreshable { await load() }
+        .refreshable { await app.reloadFeed() }
     }
 
     private var recentWeekWorkouts: [WorkoutLog] {
@@ -45,13 +40,7 @@ struct MetricsView: View {
             byAdding: .day, value: -7,
             to: Calendar.current.startOfDay(for: Date())
         )!
-        return recentLogs.workouts.filter { $0.loggedAt >= weekAgo }
-    }
-
-    private func load() async {
-        guard let group = app.group else { return }
-        recentLogs = (try? await ClipService.fetchRecentLogs(groupId: group.id, days: 30))
-            ?? ClipService.RecentLogs(foods: [], workouts: [])
+        return app.recentLogs.workouts.filter { $0.loggedAt >= weekAgo }
     }
 }
 

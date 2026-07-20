@@ -16,6 +16,8 @@ struct TodayView: View {
 
                 recordCTA
 
+                StreakCard(logs: app.recentLogs)
+
                 todaysCuts
 
                 Text("운동 칼로리는 Compendium MET × 체중, 기초대사량은 인바디 스캔 수치 기반 Katch-McArdle 공식으로 자동 계산돼요.")
