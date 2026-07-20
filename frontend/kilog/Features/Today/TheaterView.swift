@@ -296,9 +296,11 @@ private struct SegmentFillBar: View {
     }
 }
 
-/// AVPlayerLayer(aspect-fill) 래퍼 — VideoPlayer는 컨트롤이 붙어서 직접 래핑
+/// AVPlayerLayer 래퍼 — VideoPlayer는 컨트롤이 붙어서 직접 래핑.
+/// gravity: .resizeAspectFill(꽉 채움·크롭) 또는 .resizeAspect(전체 보임·레터박스)
 struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
+    var gravity: AVLayerVideoGravity = .resizeAspectFill
 
     final class LayerView: UIView {
         override static var layerClass: AnyClass { AVPlayerLayer.self }
@@ -308,7 +310,7 @@ struct PlayerLayerView: UIViewRepresentable {
     func makeUIView(context: Context) -> LayerView {
         let view = LayerView()
         view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill
+        view.playerLayer.videoGravity = gravity
         return view
     }
 
@@ -316,5 +318,6 @@ struct PlayerLayerView: UIViewRepresentable {
         if view.playerLayer.player !== player {
             view.playerLayer.player = player
         }
+        view.playerLayer.videoGravity = gravity
     }
 }

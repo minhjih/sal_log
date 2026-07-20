@@ -119,11 +119,6 @@ extension VlogExporter {
         // ── 아웃트로 ──────────────────────────────────────
         overlay.addSublayer(outroLayer(rows: rows, from: outroStart, total: totalSec))
 
-        // ── 진행 바 (상단, 인트로+세그+아웃트로 칸) ────────
-        overlay.addSublayer(progressLayer(
-            bounds: [0] + bounds + [totalSec], total: totalSec
-        ))
-
         return overlay
     }
 
@@ -225,49 +220,6 @@ extension VlogExporter {
 
         window(layer, from: start, to: total, total: total, fadeIn: 0.4)
         return layer
-    }
-
-    // ── 진행 바 (콘텐츠 영역 상단) ────────────────────────
-    private func progressLayer(bounds: [Double], total: Double) -> CALayer {
-        let W = size.width
-        let container = CALayer()
-        container.frame = CGRect(x: 0, y: contentTop, width: W, height: 24 * fs)
-
-        let n = bounds.count - 1
-        let gap: CGFloat = 5 * fs
-        let barWidth = (W - 48 * fs - CGFloat(n - 1) * gap) / CGFloat(n)
-
-        for i in 0..<n {
-            let x = 24 * fs + CGFloat(i) * (barWidth + gap)
-            let track = CALayer()
-            track.frame = CGRect(x: x, y: 14 * fs, width: barWidth, height: 3 * fs)
-            track.cornerRadius = 1.5 * fs
-            track.backgroundColor = UIColor.white.withAlphaComponent(0.28).cgColor
-            container.addSublayer(track)
-
-            let fill = CALayer()
-            fill.anchorPoint = CGPoint(x: 0, y: 0.5)
-            fill.frame = CGRect(x: x, y: 14 * fs, width: barWidth, height: 3 * fs)
-            fill.cornerRadius = 1.5 * fs
-            fill.backgroundColor = UIColor.white.cgColor
-            container.addSublayer(fill)
-
-            let anim = CAKeyframeAnimation(keyPath: "bounds.size.width")
-            anim.duration = total
-            anim.keyTimes = [
-                0,
-                NSNumber(value: bounds[i] / total),
-                NSNumber(value: bounds[i + 1] / total),
-                1,
-            ]
-            anim.values = [0, 0, barWidth, barWidth]
-            anim.beginTime = AVCoreAnimationBeginTimeAtZero
-            anim.isRemovedOnCompletion = false
-            anim.fillMode = .forwards
-            fill.bounds = CGRect(x: 0, y: 0, width: 0, height: 3 * fs)
-            fill.add(anim, forKey: "fill")
-        }
-        return container
     }
 
     // ── 레이어 유틸 ───────────────────────────────────────
