@@ -118,12 +118,12 @@ struct GroupSetupView: View {
         VStack(alignment: .leading, spacing: 14) {
             stepLabel("3 / 3 · 초대 확인")
             Text("초대 링크 또는 코드").font(.system(size: 21, weight: .bold))
-            Text("웹 초대 링크(sal-log.app/join/…)로 앱을 열면 코드가 자동 입력돼요.")
+            Text("웹 초대 링크(kilog.app/join/…)로 앱을 열면 코드가 자동 입력돼요.")
                 .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("초대 코드").font(.system(size: 11)).foregroundStyle(Theme.muted)
-                TextField("SAL-XXXXXX", text: $tokenInput)
+                TextField("KL-XXXXXX", text: $tokenInput)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .font(.system(size: 17, weight: .semibold, design: .monospaced))

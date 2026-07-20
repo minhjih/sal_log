@@ -11,10 +11,10 @@
 -- ═══════════════════════════════════════════════════════════
 
 -- ── 토큰 유틸 ─────────────────────────────────────────────
--- I/L/O/0/1 제외 알파벳+숫자 31자로 'SAL-XXXXXX' 생성
+-- I/L/O/0/1 제외 알파벳+숫자 31자로 'KL-XXXXXX' 생성
 create or replace function public.gen_invite_token()
 returns text language sql volatile as $$
-  select 'SAL-' || string_agg(
+  select 'KL-' || string_agg(
     substr('ABCDEFGHJKMNPQRSTUVWXYZ23456789', 1 + floor(random() * 31)::int, 1), ''
   )
   from generate_series(1, 6);
@@ -69,7 +69,7 @@ begin
   return jsonb_build_object(
     'group_id', v_group.id,
     'invite_token', v_token,
-    'invite_url', 'https://sal-log.app/join/' || v_token
+    'invite_url', 'https://kilog.app/join/' || v_token
   );
 end $$;
 
@@ -115,7 +115,7 @@ begin
 
   return jsonb_build_object(
     'invite_token', v_token,
-    'invite_url', 'https://sal-log.app/join/' || v_token
+    'invite_url', 'https://kilog.app/join/' || v_token
   );
 end $$;
 

@@ -86,7 +86,7 @@ struct CaptureView: View {
 
                     Text(camera.isRecording
                          ? String(format: "● %.1fs / %.0fs", camera.elapsed, Timeline.maxClipSec)
-                         : "가로로 눕혀 찍으면 더 예뻐요 · 최대 6초")
+                         : "버튼을 꾹 누르는 동안 찍혀요 · 최대 5초")
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 12).padding(.vertical, 4)
@@ -108,19 +108,41 @@ struct CaptureView: View {
 
                 Spacer()
 
-                Button {
-                    camera.isRecording ? camera.stopRecording() : camera.startRecording()
-                } label: {
-                    ZStack {
-                        Circle().stroke(.white, lineWidth: 3.5).frame(width: 70, height: 70)
-                        let color = app.myMember.map { Color(hex: $0.colorHex) } ?? Theme.me
-                        RoundedRectangle(cornerRadius: camera.isRecording ? 8 : 27)
-                            .fill(color)
-                            .frame(width: camera.isRecording ? 28 : 54,
-                                   height: camera.isRecording ? 28 : 54)
-                            .animation(.easeInOut(duration: 0.18), value: camera.isRecording)
-                    }
+                // 홀드-투-레코드 셔터: 누르는 동안 녹화, 떼면 종료 (최대 5초 자동 종료)
+                ZStack {
+                    let color = app.myMember.map { Color(hex: $0.colorHex) } ?? Theme.me
+
+                    Circle()
+                        .stroke(.white.opacity(camera.isRecording ? 0.35 : 1), lineWidth: 3.5)
+                        .frame(width: 70, height: 70)
+
+                    // 5초 진행 링
+                    Circle()
+                        .trim(from: 0, to: camera.isRecording
+                              ? min(1, camera.elapsed / Timeline.maxClipSec) : 0)
+                        .stroke(color, style: .init(lineWidth: 3.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 70, height: 70)
+                        .animation(.linear(duration: 0.1), value: camera.elapsed)
+
+                    Circle()
+                        .fill(color)
+                        .frame(width: camera.isRecording ? 40 : 54,
+                               height: camera.isRecording ? 40 : 54)
+                        .animation(.easeInOut(duration: 0.18), value: camera.isRecording)
                 }
+                .scaleEffect(camera.isRecording ? 1.12 : 1)
+                .animation(.easeInOut(duration: 0.18), value: camera.isRecording)
+                .contentShape(Circle().inset(by: -12))
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            if !camera.isRecording { camera.startRecording() }
+                        }
+                        .onEnded { _ in
+                            camera.stopRecording()
+                        }
+                )
                 .disabled(!camera.isAuthorized)
                 .opacity(camera.isAuthorized ? 1 : 0.35)
 

@@ -3,7 +3,7 @@ import UIKit
 import Combine
 import Foundation
 
-/// 전면 카메라 6초 클립 녹화 — AVCaptureSession + MovieFileOutput
+/// 전면 카메라 홀드-투-레코드 클립 녹화(최대 5초) — AVCaptureSession + MovieFileOutput
 @MainActor
 final class CameraModel: NSObject, ObservableObject {
     @Published var isAuthorized = true
@@ -14,7 +14,7 @@ final class CameraModel: NSObject, ObservableObject {
     let session = AVCaptureSession()
     private let output = AVCaptureMovieFileOutput()
     private var timer: Timer?
-    private let sessionQueue = DispatchQueue(label: "sal-log.camera")
+    private let sessionQueue = DispatchQueue(label: "kilog.camera")
 
     func configure() async {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -99,8 +99,15 @@ extension CameraModel: AVCaptureFileOutputRecordingDelegate {
         // maxRecordedDuration 도달로 끝난 경우도 파일은 유효함
         Task { @MainActor in
             self.timer?.invalidate()
+            let held = self.elapsed
             self.isRecording = false
-            self.recordedURL = outputFileURL
+            // 홀드가 너무 짧으면(실수로 스친 탭) 폐기
+            if held >= 0.3 {
+                self.recordedURL = outputFileURL
+            } else {
+                try? FileManager.default.removeItem(at: outputFileURL)
+                self.elapsed = 0
+            }
         }
     }
 }

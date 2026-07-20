@@ -66,7 +66,7 @@ struct ExportView: View {
 
                     if case .done(let url) = stage {
                         ShareLink(item: url,
-                                  preview: SharePreview("sal-log 브이로그")) {
+                                  preview: SharePreview("Kilog 브이로그")) {
                             Text("브이로그 공유")
                                 .font(.system(size: 13.5, weight: .bold))
                                 .foregroundStyle(Color(hex: "#14060C"))

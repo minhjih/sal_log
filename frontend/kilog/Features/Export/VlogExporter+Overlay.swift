@@ -126,7 +126,7 @@ extension VlogExporter {
         layer.frame = CGRect(x: 0, y: 0, width: width, height: height)
         layer.backgroundColor = UIColor(Theme.bg).cgColor
 
-        let title = textLayer("sal—log", size: 54, weight: .light,
+        let title = textLayer("ki—log", size: 54, weight: .light,
                               color: UIColor(Theme.text), alignment: .center)
         title.frame = CGRect(x: 0, y: height / 2 - 62, width: width, height: 66)
         layer.addSublayer(title)
@@ -198,7 +198,7 @@ extension VlogExporter {
         )
         layer.addSublayer(underline)
 
-        let tagline = textLayer("sal—log · 같은 하루, 같은 다짐", size: 18, weight: .medium,
+        let tagline = textLayer("ki—log · 같은 하루, 같은 다짐", size: 18, weight: .medium,
                                 color: UIColor(Theme.faint), alignment: .center)
         tagline.frame = CGRect(x: 0, y: 460, width: width, height: 24)
         layer.addSublayer(tagline)

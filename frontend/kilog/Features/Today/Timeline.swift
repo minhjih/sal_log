@@ -19,7 +19,7 @@ enum Timeline {
     static let defaultSegmentSec: Double = 3.0
     static let minSegmentSec: Double = 1.6
     static let maxSegmentSec: Double = 8.0
-    static let maxClipSec: Double = 6.0
+    static let maxClipSec: Double = 5.0
 
     static func buildSegments(_ clips: [TaggedClip]) -> [Segment] {
         let sorted = clips.sorted { $0.recordedAt < $1.recordedAt }

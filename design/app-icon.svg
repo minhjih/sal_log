@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Kilog 앱 아이콘 · KL 레터마크
+    · 배경: 앱 다크 팔레트(#0B0B0F) + 브랜드 듀오 컬러의 은은한 글로우
+    · 레터: 나(#FF7A9E) → 파트너(#6FC3FF) 시그니처 그라데이션, 라운드 캡
+    · full-bleed 정사각형 — iOS가 모서리 마스크를 자동 적용
+  -->
+  <defs>
+    <!-- userSpaceOnUse: 세로 직선(K 기둥)도 칠해지고, 전체 레터에 그라데이션이 연속으로 흐름 -->
+    <linearGradient id="duo" gradientUnits="userSpaceOnUse" x1="230" y1="280" x2="800" y2="740">
+      <stop offset="0" stop-color="#FF7A9E"/>
+      <stop offset="1" stop-color="#6FC3FF"/>
+    </linearGradient>
+    <radialGradient id="glowPink" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FF7A9E" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FF7A9E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowBlue" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6FC3FF" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#6FC3FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="1024" height="1024" fill="#0B0B0F"/>
+  <circle cx="180" cy="230" r="420" fill="url(#glowPink)"/>
+  <circle cx="880" cy="820" r="460" fill="url(#glowBlue)"/>
+
+  <!-- KL 레터마크 -->
+  <g stroke="url(#duo)" stroke-width="92" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- K -->
+    <path d="M 268 302 V 722"/>
+    <path d="M 466 302 L 284 512 L 466 722"/>
+    <!-- L -->
+    <path d="M 590 302 V 722 H 760"/>
+  </g>
+
+  <!-- 시그니처 대시 (워드마크 ki—log의 '—') -->
+  <rect x="452" y="836" width="120" height="14" rx="7" fill="url(#duo)"/>
+</svg>

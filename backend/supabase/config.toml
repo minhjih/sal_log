@@ -17,8 +17,8 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "https://sal-log.app"
-additional_redirect_urls = ["app.sallog://auth-callback"]
+site_url = "https://kilog.app"
+additional_redirect_urls = ["app.kilog://auth-callback"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 enable_signup = true
