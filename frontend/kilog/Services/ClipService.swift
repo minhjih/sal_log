@@ -135,11 +135,39 @@ enum ClipService {
         return inserted
     }
 
+    /// 클립 + 영상 파일 + 클립에 태그된 식사/운동 기록까지 삭제.
+    /// (7일 자동 만료와 달리, 직접 삭제는 잘못 올린 기록 정정이므로 로그도 함께 지운다)
     static func deleteClip(_ clip: Clip) async throws {
         if let key = clip.videoKey {
             try? await Supa.client.storage.from("clips").remove(paths: [key])
         }
-        try await Supa.client.from("clips").delete().eq("id", value: clip.id).execute()
+        try await Supa.client.from("food_logs").delete()
+            .eq("clip_id", value: clip.id).execute()
+        try await Supa.client.from("workout_logs").delete()
+            .eq("clip_id", value: clip.id).execute()
+        try await Supa.client.from("clips").delete()
+            .eq("id", value: clip.id).execute()
+    }
+
+    // ── 영상 로컬 캐시 (스플래시 프리로딩·즉시 재생용) ──────
+    private static var cacheDir: URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("clip-videos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// 클립 영상을 캐시 디렉터리에 내려받고 로컬 URL 반환. 이미 있으면 재사용.
+    static func cachedVideoURL(for clip: Clip) async throws -> URL? {
+        guard let key = clip.videoKey else { return nil }
+        let local = cacheDir.appendingPathComponent("\(clip.id.uuidString).mp4")
+        if FileManager.default.fileExists(atPath: local.path) { return local }
+
+        let signed = try await signedVideoURL(for: key)
+        let (tmp, _) = try await URLSession.shared.download(from: signed)
+        try? FileManager.default.removeItem(at: local)
+        try FileManager.default.moveItem(at: tmp, to: local)
+        return local
     }
 
     // ── signed URL (재생용) — 만료 10분 전까지 캐시 ─────────

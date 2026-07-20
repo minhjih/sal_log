@@ -3,18 +3,30 @@ import AVFoundation
 import UIKit
 import SwiftUI
 
-/// 하루의 클립들을 16:9(960×540) 한 편의 브이로그로 합성.
-/// JSX의 canvas + MediaRecorder 내보내기를 AVFoundation으로 재구현:
-///  · 인트로(1.4s) → 세그먼트(위/아래 두 줄 분할) → 아웃트로(2.2s)
+/// 하루의 클립들을 인스타 스토리용 세로(9:16) 브이로그 한 편으로 합성.
+///
+///  · 캔버스: 1080×1920 (스토리 규격)
+///  · 콘텐츠: 앱 오늘 탭에 보이는 그대로의 4:5(1080×1350) 두 줄 분할을
+///    세로 중앙에 배치 — 늘리거나 자르지 않고 위아래는 검은색 레터박스
+///  · 인트로(1.4s) → 세그먼트 → 아웃트로(2.2s)
 ///  · 실제 영상은 AVMutableComposition 트랙에 배치하고 transform/crop으로 줄에 맞춤
 ///  · 텍스트/그라데이션/칩 오버레이는 CoreAnimationTool의 CALayer로 렌더
 final class VlogExporter {
 
-    // 캔버스 규격 (JSX와 동일)
-    static let width: CGFloat = 960
-    static let height: CGFloat = 540
+    /// 스토리 캔버스 (9:16)
+    static let canvasSize = CGSize(width: 1080, height: 1920)
+    /// 실제 콘텐츠 영역 — 앱 화면과 동일한 4:5
+    static let contentSize = CGSize(width: 1080, height: 1350)
+
     static let introSec = 1.4
     static let outroSec = 2.2
+
+    var size: CGSize { Self.canvasSize }
+    /// 콘텐츠(4:5) 블록의 세로 시작 위치 (위아래 레터박스 여백)
+    var contentTop: CGFloat { (size.height - Self.contentSize.height) / 2 }
+    var stripHeight: CGFloat { Self.contentSize.height / 2 }
+    /// 레이아웃 상수 스케일 (기준 폭 960의 배수)
+    var fs: CGFloat { Self.contentSize.width / 960 }
 
     struct Row {
         let member: MemberOverview
@@ -54,8 +66,13 @@ final class VlogExporter {
         var bounds: [Double] = [Self.introSec]
         for d in segDurations { bounds.append(bounds.last! + d) }
 
-        // 1) 베이스(배경) 트랙 — 전체 길이를 덮는 무지 배경 영상
-        let baseURL = try await Self.makeBackgroundVideo(duration: totalSec)
+        // 1) 베이스(배경) 트랙 — 검은 레터박스 + 콘텐츠 영역 배경색
+        let baseURL = try await Self.makeBackgroundVideo(
+            duration: totalSec, size: size,
+            contentRect: CGRect(x: 0, y: contentTop,
+                                width: Self.contentSize.width,
+                                height: Self.contentSize.height)
+        )
         let composition = AVMutableComposition()
         let baseAsset = AVURLAsset(url: baseURL)
         guard
@@ -67,12 +84,9 @@ final class VlogExporter {
                                     duration: CMTime(seconds: totalSec, preferredTimescale: 600))
         try baseTrack.insertTimeRange(baseRange, of: baseVideoTrack, at: .zero)
 
-        // 2) 위/아래 줄 트랙에 클립 배치
-        let rows: [(row: Row, y: CGFloat)] = [(input.topRow, 0)]
-            + (input.bottomRow.map { [($0, Self.height / 2)] } ?? [])
-
-        var instructions: [AVMutableVideoCompositionInstruction] = []
-        let baseLayerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: baseTrack)
+        // 2) 콘텐츠 영역 안에 위/아래 줄 트랙 배치
+        let rows: [(row: Row, y: CGFloat)] = [(input.topRow, contentTop)]
+            + (input.bottomRow.map { [($0, contentTop + stripHeight)] } ?? [])
 
         var rowTracks: [Int: AVMutableCompositionTrack] = [:]
         for (i, _) in rows.enumerated() {
@@ -80,11 +94,8 @@ final class VlogExporter {
                 withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         }
 
-        // 세그먼트마다: 각 줄에 활성 클립 삽입 + 변환 기록
         struct Placement {
-            let trackIndex: Int
             let track: AVMutableCompositionTrack
-            let assetTrack: AVAssetTrack
             let transform: CGAffineTransform
             let crop: CGRect
             let range: CMTimeRange
@@ -116,54 +127,52 @@ final class VlogExporter {
                 try track.insertTimeRange(sourceRange, of: videoTrack, at: at)
 
                 let stripRect = CGRect(x: 0, y: rowInfo.y,
-                                       width: Self.width, height: Self.height / 2)
+                                       width: size.width, height: stripHeight)
                 let natural = try await videoTrack.load(.naturalSize)
                 let preferred = try await videoTrack.load(.preferredTransform)
                 let (transform, crop) = Self.aspectFill(
                     naturalSize: natural, preferredTransform: preferred, into: stripRect
                 )
                 placements.append(Placement(
-                    trackIndex: ri, track: track, assetTrack: videoTrack,
-                    transform: transform, crop: crop,
+                    track: track, transform: transform, crop: crop,
                     range: CMTimeRange(start: at,
                                        duration: CMTime(seconds: segDur, preferredTimescale: 600))
                 ))
             }
         }
 
-        // 3) videoComposition 인스트럭션 — 전체를 하나로 (트랙별 램프 없음, 상시 레이어)
+        // 3) videoComposition 인스트럭션
         let mainInstruction = AVMutableVideoCompositionInstruction()
         mainInstruction.timeRange = baseRange
 
         var layerInstructions: [AVMutableVideoCompositionLayerInstruction] = []
         for (_, track) in rowTracks.sorted(by: { $0.key < $1.key }) {
             let li = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
-            // 트랙 안의 각 배치 구간에 변환 적용
             for p in placements where p.track === track {
                 li.setTransform(p.transform, at: p.range.start)
                 li.setCropRectangle(p.crop, at: p.range.start)
-                // 구간 밖에서는 투명 처리해 배경이 보이게
                 li.setOpacity(1, at: p.range.start)
                 li.setOpacity(0, at: p.range.end)
             }
             layerInstructions.append(li)
         }
-        layerInstructions.append(baseLayerInstruction)
+        layerInstructions.append(
+            AVMutableVideoCompositionLayerInstruction(assetTrack: baseTrack)
+        )
         mainInstruction.layerInstructions = layerInstructions
-        instructions.append(mainInstruction)
 
         let videoComposition = AVMutableVideoComposition()
-        videoComposition.renderSize = CGSize(width: Self.width, height: Self.height)
+        videoComposition.renderSize = size
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
-        videoComposition.instructions = instructions
+        videoComposition.instructions = [mainInstruction]
 
         // 4) 오버레이 레이어 (인트로/세그먼트 HUD/아웃트로/진행바)
         let videoLayer = CALayer()
-        videoLayer.frame = CGRect(x: 0, y: 0, width: Self.width, height: Self.height)
+        videoLayer.frame = CGRect(origin: .zero, size: size)
         let parentLayer = CALayer()
         parentLayer.frame = videoLayer.frame
         parentLayer.addSublayer(videoLayer)
-        parentLayer.addSublayer(Self.overlayLayer(
+        parentLayer.addSublayer(overlayLayer(
             input: input, bounds: bounds, segDurations: segDurations,
             totalSec: totalSec, rows: rows.map(\.row)
         ))
@@ -172,11 +181,11 @@ final class VlogExporter {
             postProcessingAsVideoLayer: videoLayer, in: parentLayer
         )
 
-        // 5) 내보내기
+        // 5) 내보내기 — renderSize(1080×1920)를 그대로 살리기 위해 HighestQuality
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("kilog-\(UUID().uuidString).mp4")
         guard let session = AVAssetExportSession(
-            asset: composition, presetName: AVAssetExportPreset960x540
+            asset: composition, presetName: AVAssetExportPresetHighestQuality
         ) else { throw ExportError.exportFailed }
         session.outputURL = outURL
         session.outputFileType = .mp4
@@ -202,7 +211,6 @@ final class VlogExporter {
     static func aspectFill(
         naturalSize: CGSize, preferredTransform: CGAffineTransform, into target: CGRect
     ) -> (CGAffineTransform, CGRect) {
-        // 회전 반영된 표시 크기
         let rect = CGRect(origin: .zero, size: naturalSize)
             .applying(preferredTransform)
         let displaySize = CGSize(width: abs(rect.width), height: abs(rect.height))
@@ -210,7 +218,6 @@ final class VlogExporter {
         let scale = max(target.width / displaySize.width,
                         target.height / displaySize.height)
 
-        // 소스(표시 좌표)에서 보여줄 영역
         let visibleW = target.width / scale
         let visibleH = target.height / scale
         let cropInDisplay = CGRect(
@@ -219,7 +226,6 @@ final class VlogExporter {
             width: visibleW, height: visibleH
         )
 
-        // preferredTransform 정규화(원점 보정) 후 스케일·이동
         var t = preferredTransform
         t.tx = rect.minX < 0 ? -rect.minX : t.tx
         t.ty = rect.minY < 0 ? -rect.minY : t.ty
@@ -231,31 +237,31 @@ final class VlogExporter {
             .concatenating(CGAffineTransform(
                 translationX: target.minX, y: target.minY))
 
-        // crop은 소스 원좌표 기준
         let cropInSource = cropInDisplay.applying(t.inverted())
         return (full, cropInSource.standardized)
     }
 
     // ── 배경(무지) 영상 생성 ──────────────────────────────
-    /// AVMutableComposition은 빈 구간을 검정으로 두지만 인트로/아웃트로 동안
-    /// 프레임이 없는 문제를 피하려고 배경색 프레임을 저프레임레이트로 생성한다.
-    static func makeBackgroundVideo(duration: Double) async throws -> URL {
+    /// 캔버스 전체는 검은색(레터박스), 콘텐츠 영역만 앱 배경색으로 채운다.
+    static func makeBackgroundVideo(
+        duration: Double, size: CGSize, contentRect: CGRect
+    ) async throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("bg-\(UUID().uuidString).mp4")
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: Int(width),
-            AVVideoHeightKey: Int(height),
+            AVVideoWidthKey: Int(size.width),
+            AVVideoHeightKey: Int(size.height),
         ]
         let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: writerInput,
             sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: Int(width),
-                kCVPixelBufferHeightKey as String: Int(height),
+                kCVPixelBufferWidthKey as String: Int(size.width),
+                kCVPixelBufferHeightKey as String: Int(size.height),
             ]
         )
         writer.add(writerInput)
@@ -270,15 +276,23 @@ final class VlogExporter {
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         if let ctx = CGContext(
             data: CVPixelBufferGetBaseAddress(pixelBuffer),
-            width: Int(width), height: Int(height),
+            width: Int(size.width), height: Int(size.height),
             bitsPerComponent: 8,
             bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                 | CGBitmapInfo.byteOrder32Little.rawValue
         ) {
+            ctx.setFillColor(UIColor.black.cgColor)
+            ctx.fill(CGRect(origin: .zero, size: size))
+            // CGContext는 좌하단 원점이라 y 반전
+            let flipped = CGRect(
+                x: contentRect.minX,
+                y: size.height - contentRect.maxY,
+                width: contentRect.width, height: contentRect.height
+            )
             ctx.setFillColor(UIColor(Theme.bg).cgColor)
-            ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            ctx.fill(flipped)
         }
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
 

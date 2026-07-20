@@ -27,17 +27,21 @@ final class TheaterModel: ObservableObject {
         return Timeline.duration(of: segments[index], durations: durations)
     }
 
-    func update(clips: [TaggedClip], topUserId: UUID?, bottomUserId: UUID?) {
+    func update(
+        clips: [TaggedClip], topUserId: UUID?, bottomUserId: UUID?,
+        localFiles: [UUID: URL] = [:]
+    ) {
         self.topUserId = topUserId
         self.bottomUserId = bottomUserId
         let next = Timeline.buildSegments(clips)
-        // 클립 구성이 실제로 바뀌었을 때만 리셋
+        // 클립 구성이 실제로 바뀌었을 때만 리셋 (캐시가 새로 생긴 경우는 반영)
         let old = segments.map(\.clips).map { Set($0.values.map(\.id)) }
         let new = next.map(\.clips).map { Set($0.values.map(\.id)) }
-        guard old != new else { return }
+        let newCache = clips.contains { itemCache[$0.id] == nil && localFiles[$0.id] != nil }
+        guard old != new || newCache else { return }
         segments = next
         index = min(index, max(0, segments.count - 1))
-        Task { await preload(clips: clips) }
+        Task { await preload(clips: clips, localFiles: localFiles) }
         schedule()
     }
 
@@ -98,12 +102,20 @@ final class TheaterModel: ObservableObject {
         }
     }
 
-    /// signed URL 발급 + AVPlayerItem 준비 + 실제 길이 로드
-    private func preload(clips: [TaggedClip]) async {
+    /// AVPlayerItem 준비 + 실제 길이 로드.
+    /// 스플래시에서 받아둔 로컬 캐시가 있으면 그걸 사용해 즉시 재생.
+    private func preload(clips: [TaggedClip], localFiles: [UUID: URL]) async {
         for clip in clips {
-            guard let key = clip.clip.videoKey, itemCache[clip.id] == nil else { continue }
+            guard clip.clip.videoKey != nil, itemCache[clip.id] == nil else { continue }
             do {
-                let url = try await ClipService.signedVideoURL(for: key)
+                let url: URL
+                if let local = localFiles[clip.id] {
+                    url = local
+                } else if let key = clip.clip.videoKey {
+                    url = try await ClipService.signedVideoURL(for: key)
+                } else {
+                    continue
+                }
                 let asset = AVURLAsset(url: url)
                 itemCache[clip.id] = AVPlayerItem(asset: asset)
                 if let seconds = try? await asset.load(.duration).seconds,
@@ -114,6 +126,8 @@ final class TheaterModel: ObservableObject {
                 // 로드 실패 시 캡션 placeholder로 표시
             }
         }
+        // 새 아이템이 준비되면 현재 세그먼트 다시 적용
+        schedule()
     }
 }
 

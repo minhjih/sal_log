@@ -22,7 +22,11 @@ struct ExportView: View {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 12) {
-                // 미리보기 캔버스 (16:9)
+                Text("인스타 스토리 규격(9:16) · 화면 그대로 + 검은 여백")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+
+                // 미리보기 캔버스 (9:16)
                 ZStack {
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Theme.bg)
@@ -57,7 +61,8 @@ struct ExportView: View {
                             .padding()
                     }
                 }
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .aspectRatio(9 / 16, contentMode: .fit)
+                .frame(maxHeight: 520)
 
                 // 하단 바
                 HStack(spacing: 8) {
@@ -122,16 +127,18 @@ struct ExportView: View {
         player = nil
 
         do {
-            // 1) 영상 클립 로컬 다운로드 + 길이 측정
+            // 1) 영상 클립 준비 — 스플래시에서 받아둔 캐시를 우선 사용
             var localFiles: [UUID: URL] = [:]
             var durations: [UUID: Double] = [:]
             for clip in clips {
-                guard let key = clip.clip.videoKey else { continue }
-                let signed = try await ClipService.signedVideoURL(for: key)
-                let (data, _) = try await URLSession.shared.data(from: signed)
-                let local = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("export-\(clip.id.uuidString).mp4")
-                try data.write(to: local)
+                guard clip.clip.videoKey != nil else { continue }
+                let local: URL?
+                if let cached = app.videoCache[clip.id] {
+                    local = cached
+                } else {
+                    local = try? await ClipService.cachedVideoURL(for: clip.clip)
+                }
+                guard let local else { continue }
                 localFiles[clip.id] = local
                 let asset = AVURLAsset(url: local)
                 if let sec = try? await asset.load(.duration).seconds,
