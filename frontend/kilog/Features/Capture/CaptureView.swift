@@ -57,6 +57,7 @@ struct CaptureView: View {
         var kcal: Int
         var minutes: Int
         var part: String?
+        var muscles: [String: Double]?
         var isCustom: Bool
     }
     @State private var sessionMoves: [MoveEntry] = []
@@ -669,7 +670,9 @@ struct CaptureView: View {
                 return nil
             }
             return MoveEntry(name: String(name.prefix(20)), kcal: kcal,
-                             minutes: minutes, part: customMovePart, isCustom: true)
+                             minutes: minutes, part: customMovePart,
+                             muscles: MuscleMap.defaultLoads(bodyPart: customMovePart),
+                             isCustom: true)
         }
         guard let m = selectedMove else { return nil }
         if m.isStrength {
@@ -677,13 +680,17 @@ struct CaptureView: View {
                                           minutes: strengthMinutes)
             return MoveEntry(
                 name: "\(m.name) \(strengthWeight)kg×\(strengthReps)×\(strengthSets)세트",
-                kcal: kcal, minutes: strengthMinutes, part: m.bodyPart, isCustom: false
+                kcal: kcal, minutes: strengthMinutes, part: m.bodyPart,
+                muscles: m.muscleLoads ?? MuscleMap.defaultLoads(bodyPart: m.bodyPart),
+                isCustom: false
             )
         }
         let kcal = HealthMath.metKcal(met: m.met, weightKg: app.myProfile?.weight,
                                       minutes: minutes)
         return MoveEntry(name: m.name, kcal: kcal, minutes: minutes,
-                         part: m.bodyPart, isCustom: false)
+                         part: m.bodyPart,
+                         muscles: m.muscleLoads ?? MuscleMap.defaultLoads(bodyPart: m.bodyPart),
+                         isCustom: false)
     }
 
     private func addCurrentMove() {
@@ -862,7 +869,8 @@ struct CaptureView: View {
                 entries = [single]
             }
             tags = entries.map {
-                .move(name: $0.name, kcal: $0.kcal, minutes: $0.minutes, part: $0.part)
+                .move(name: $0.name, kcal: $0.kcal, minutes: $0.minutes,
+                      part: $0.part, muscles: $0.muscles)
             }
             customMoveEntries = entries.filter(\.isCustom)
         }

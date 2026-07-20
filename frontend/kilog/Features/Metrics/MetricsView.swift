@@ -348,59 +348,35 @@ struct StreakCard: View {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 인체 모형 부위 비교 — 최근 7일 운동 부위별 강도를 실루엣에 표시
+// 인체 모형 근육 비교 — 최근 7일 근육별 부하를 앞/뒤 실루엣에 표시
 // ═══════════════════════════════════════════════════════════
 struct PartComparisonCard: View {
     @EnvironmentObject private var app: AppState
     let workouts: [WorkoutLog]
 
-    struct PartLoad {
-        var upper = 0     // 상체 kcal
-        var lower = 0     // 하체
-        var core = 0      // 코어
-        var cardio = 0    // 유산소
-        var total: Int { upper + lower + core + cardio }
-    }
-
-    private func load(for userId: UUID) -> PartLoad {
-        var result = PartLoad()
-        for log in workouts where log.userId == userId {
-            switch log.bodyPart {
-            case "상체": result.upper += log.calories
-            case "하체": result.lower += log.calories
-            case "코어": result.core += log.calories
-            case "유산소": result.cardio += log.calories
-            case "전신":
-                // 전신은 세 부위에 균등 배분
-                result.upper += log.calories / 3
-                result.lower += log.calories / 3
-                result.core += log.calories / 3
-            default:
-                result.cardio += log.calories
-            }
+    /// 두 사람을 같은 스케일로 비교하기 위한 근육별 최대 kcal
+    private var maxMuscleKcal: Double {
+        let values = app.members.flatMap { member in
+            Array(MuscleMap.loads(
+                from: workouts.filter { $0.userId == member.userId }
+            ).values)
         }
-        return result
-    }
-
-    /// 두 사람을 같은 스케일로 비교하기 위한 최대값
-    private var maxPartKcal: Int {
-        let loads = app.members.map { load(for: $0.userId) }
-        return max(loads.flatMap { [$0.upper, $0.lower, $0.core] }.max() ?? 1, 1)
+        return max(values.max() ?? 1, 1)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("이번 주 운동 부위").font(.system(size: 13, weight: .bold))
+                Text("이번 주 근육 부하").font(.system(size: 13, weight: .bold))
                 Spacer()
-                Text("최근 7일 · 진할수록 많이 씀")
+                Text("최근 7일 · 진할수록 부하 큼")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Theme.faint)
             }
 
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 ForEach(app.members.prefix(2)) { member in
-                    figureColumn(member)
+                    memberColumn(member)
                 }
             }
         }
@@ -408,65 +384,78 @@ struct PartComparisonCard: View {
         .card(radius: 16)
     }
 
-    private func figureColumn(_ member: MemberOverview) -> some View {
-        let partLoad = load(for: member.userId)
-        let maxKcal = Double(maxPartKcal)
+    private func memberColumn(_ member: MemberOverview) -> some View {
+        let mine = workouts.filter { $0.userId == member.userId }
+        let loads = MuscleMap.loads(from: mine)
+        let hasCardio = mine.contains { $0.bodyPart == "유산소" }
         let color = Color(hex: member.colorHex)
+        let scale = maxMuscleKcal
+
+        func intensity(_ muscle: String) -> Double {
+            (loads[muscle] ?? 0) / scale
+        }
 
         return VStack(spacing: 8) {
-            BodyFigure(
-                color: color,
-                upper: Double(partLoad.upper) / maxKcal,
-                lower: Double(partLoad.lower) / maxKcal,
-                core: Double(partLoad.core) / maxKcal,
-                cardio: partLoad.cardio > 0 ? 1 : 0
-            )
-            .frame(width: 96, height: 168)
+            // 앞면 + 뒷면 실루엣
+            HStack(spacing: 6) {
+                VStack(spacing: 3) {
+                    MuscleFigure(side: .front, color: color,
+                                 intensity: intensity, cardio: hasCardio)
+                        .frame(width: 62, height: 128)
+                    Text("앞").font(.system(size: 9)).foregroundStyle(Theme.faint)
+                }
+                VStack(spacing: 3) {
+                    MuscleFigure(side: .back, color: color,
+                                 intensity: intensity, cardio: hasCardio)
+                        .frame(width: 62, height: 128)
+                    Text("뒤").font(.system(size: 9)).foregroundStyle(Theme.faint)
+                }
+            }
 
             Text(member.displayName)
                 .font(.system(size: 12, weight: .semibold))
 
-            if partLoad.total == 0 {
+            if loads.isEmpty {
                 Text("이번 주 기록 없음")
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.faint)
             } else {
+                // 부하 상위 근육 목록
                 VStack(spacing: 3) {
-                    partChip("상체", partLoad.upper)
-                    partChip("하체", partLoad.lower)
-                    partChip("코어", partLoad.core)
-                    partChip("유산소", partLoad.cardio)
+                    let ranked = loads.sorted { $0.value > $1.value }.prefix(4)
+                    ForEach(Array(ranked), id: \.key) { muscle, kcal in
+                        HStack {
+                            Text(muscle)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(Theme.muted)
+                            Spacer()
+                            Text("−\(Int(kcal))")
+                                .font(.system(size: 10.5, weight: .bold))
+                                .foregroundStyle(Theme.green)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Theme.bg)
+                        .clipShape(Capsule())
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity)
     }
-
-    private func partChip(_ label: String, _ kcal: Int) -> some View {
-        HStack {
-            Text(label).font(.system(size: 10.5)).foregroundStyle(Theme.muted)
-            Spacer()
-            Text(kcal > 0 ? "−\(kcal)" : "·")
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundStyle(kcal > 0 ? Theme.green : Theme.faint)
-        }
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(Theme.bg)
-        .clipShape(Capsule())
-    }
 }
 
-/// 사람 실루엣 — 부위별 강도(0~1)에 따라 진하게 칠한다.
-/// 유산소는 실루엣 뒤 글로우로 표현.
-struct BodyFigure: View {
-    let color: Color
-    let upper: Double    // 팔·어깨
-    let lower: Double    // 다리
-    let core: Double     // 몸통
-    let cardio: Double   // 0 또는 1
+/// 사람 실루엣 (앞/뒤) — 근육 그룹별 강도(0~1)만큼 진하게.
+/// 유산소는 실루엣 뒤 글로우.
+struct MuscleFigure: View {
+    enum Side { case front, back }
 
-    private func fill(_ intensity: Double) -> Color {
-        color.opacity(0.14 + 0.78 * min(1, max(0, intensity)))
+    let side: Side
+    let color: Color
+    let intensity: (String) -> Double
+    let cardio: Bool
+
+    private func fill(_ muscle: String) -> Color {
+        color.opacity(0.12 + 0.82 * min(1, max(0, intensity(muscle))))
     }
 
     var body: some View {
@@ -475,47 +464,88 @@ struct BodyFigure: View {
             let h = geo.size.height
 
             ZStack {
-                // 유산소 글로우
-                if cardio > 0 {
+                if cardio {
                     RadialGradient(
-                        colors: [color.opacity(0.35), .clear],
-                        center: .center, startRadius: 0, endRadius: w * 0.85
+                        colors: [color.opacity(0.3), .clear],
+                        center: .center, startRadius: 0, endRadius: w
                     )
                 }
 
-                // 머리 (중립 색)
+                // 머리 (중립)
                 Circle()
-                    .fill(color.opacity(0.3))
-                    .frame(width: w * 0.24, height: w * 0.24)
-                    .position(x: w * 0.5, y: h * 0.09)
+                    .fill(color.opacity(0.28))
+                    .frame(width: w * 0.22, height: w * 0.22)
+                    .position(x: w * 0.5, y: h * 0.065)
 
-                // 몸통 = 코어
-                RoundedRectangle(cornerRadius: w * 0.09)
-                    .fill(fill(core))
-                    .frame(width: w * 0.34, height: h * 0.34)
-                    .position(x: w * 0.5, y: h * 0.36)
+                // 어깨 (양쪽 캡)
+                Circle().fill(fill("어깨"))
+                    .frame(width: w * 0.17, height: w * 0.17)
+                    .position(x: w * 0.28, y: h * 0.165)
+                Circle().fill(fill("어깨"))
+                    .frame(width: w * 0.17, height: w * 0.17)
+                    .position(x: w * 0.72, y: h * 0.165)
 
-                // 팔 = 상체 (좌/우)
-                Capsule()
-                    .fill(fill(upper))
-                    .frame(width: w * 0.13, height: h * 0.32)
-                    .rotationEffect(.degrees(14))
-                    .position(x: w * 0.22, y: h * 0.36)
-                Capsule()
-                    .fill(fill(upper))
-                    .frame(width: w * 0.13, height: h * 0.32)
-                    .rotationEffect(.degrees(-14))
-                    .position(x: w * 0.78, y: h * 0.36)
+                if side == .front {
+                    // 가슴
+                    RoundedRectangle(cornerRadius: w * 0.07)
+                        .fill(fill("가슴"))
+                        .frame(width: w * 0.36, height: h * 0.13)
+                        .position(x: w * 0.5, y: h * 0.225)
+                    // 복근
+                    RoundedRectangle(cornerRadius: w * 0.07)
+                        .fill(fill("복근"))
+                        .frame(width: w * 0.3, height: h * 0.16)
+                        .position(x: w * 0.5, y: h * 0.38)
+                } else {
+                    // 등 (상부+중부)
+                    RoundedRectangle(cornerRadius: w * 0.08)
+                        .fill(fill("등"))
+                        .frame(width: w * 0.38, height: h * 0.3)
+                        .position(x: w * 0.5, y: h * 0.31)
+                }
 
-                // 다리 = 하체 (좌/우)
-                Capsule()
-                    .fill(fill(lower))
-                    .frame(width: w * 0.15, height: h * 0.42)
-                    .position(x: w * 0.4, y: h * 0.76)
-                Capsule()
-                    .fill(fill(lower))
-                    .frame(width: w * 0.15, height: h * 0.42)
-                    .position(x: w * 0.6, y: h * 0.76)
+                // 팔 (양쪽)
+                Capsule().fill(fill("팔"))
+                    .frame(width: w * 0.11, height: h * 0.3)
+                    .rotationEffect(.degrees(12))
+                    .position(x: w * 0.15, y: h * 0.34)
+                Capsule().fill(fill("팔"))
+                    .frame(width: w * 0.11, height: h * 0.3)
+                    .rotationEffect(.degrees(-12))
+                    .position(x: w * 0.85, y: h * 0.34)
+
+                if side == .back {
+                    // 둔근
+                    Circle().fill(fill("둔근"))
+                        .frame(width: w * 0.19, height: w * 0.19)
+                        .position(x: w * 0.41, y: h * 0.51)
+                    Circle().fill(fill("둔근"))
+                        .frame(width: w * 0.19, height: w * 0.19)
+                        .position(x: w * 0.59, y: h * 0.51)
+                    // 햄스트링
+                    Capsule().fill(fill("햄스트링"))
+                        .frame(width: w * 0.15, height: h * 0.2)
+                        .position(x: w * 0.4, y: h * 0.67)
+                    Capsule().fill(fill("햄스트링"))
+                        .frame(width: w * 0.15, height: h * 0.2)
+                        .position(x: w * 0.6, y: h * 0.67)
+                } else {
+                    // 대퇴 (앞)
+                    Capsule().fill(fill("대퇴"))
+                        .frame(width: w * 0.16, height: h * 0.24)
+                        .position(x: w * 0.4, y: h * 0.6)
+                    Capsule().fill(fill("대퇴"))
+                        .frame(width: w * 0.16, height: h * 0.24)
+                        .position(x: w * 0.6, y: h * 0.6)
+                }
+
+                // 종아리 (양면)
+                Capsule().fill(fill("종아리"))
+                    .frame(width: w * 0.12, height: h * 0.18)
+                    .position(x: w * 0.4, y: h * 0.87)
+                Capsule().fill(fill("종아리"))
+                    .frame(width: w * 0.12, height: h * 0.18)
+                    .position(x: w * 0.6, y: h * 0.87)
             }
         }
     }

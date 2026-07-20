@@ -240,6 +240,7 @@ struct WorkoutLog: Codable, Identifiable, Hashable {
     var calories: Int
     var durationMinutes: Int
     var bodyPart: String?
+    var muscleLoads: [String: Double]?
     var loggedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -250,6 +251,7 @@ struct WorkoutLog: Codable, Identifiable, Hashable {
         case exerciseName = "exercise_name"
         case durationMinutes = "duration_minutes"
         case bodyPart = "body_part"
+        case muscleLoads = "muscle_loads"
         case loggedAt = "logged_at"
     }
 }
@@ -257,19 +259,20 @@ struct WorkoutLog: Codable, Identifiable, Hashable {
 // ── 클립 + 연결된 태그를 묶은 화면용 모델 ──────────────────
 enum ClipTag: Hashable {
     case food(name: String, kcal: Int)
-    case move(name: String, kcal: Int, minutes: Int, part: String?)
+    case move(name: String, kcal: Int, minutes: Int, part: String?,
+              muscles: [String: Double]?)
 
     var kcal: Int {
         switch self {
         case .food(_, let k): return k
-        case .move(_, let k, _, _): return k
+        case .move(_, let k, _, _, _): return k
         }
     }
     var isMove: Bool { if case .move = self { return true } else { return false } }
     var name: String {
         switch self {
         case .food(let n, _): return n
-        case .move(let n, _, _, _): return n
+        case .move(let n, _, _, _, _): return n
         }
     }
 }
@@ -291,17 +294,21 @@ struct ExerciseItem: Codable, Identifiable, Hashable {
     var bodyPart: String
     /// "time"(분 슬라이더) | "strength"(무게×횟수×세트)
     var mode: String?
+    /// 세부 근육별 부하 비율 (합 1.0) — 예: {"가슴":0.6,"어깨":0.2,"팔":0.2}
+    var muscleLoads: [String: Double]?
 
     var isStrength: Bool { mode == "strength" }
 
-    init(id: Int, name: String, met: Double, bodyPart: String, mode: String? = nil) {
+    init(id: Int, name: String, met: Double, bodyPart: String,
+         mode: String? = nil, muscleLoads: [String: Double]? = nil) {
         self.id = id; self.name = name; self.met = met
-        self.bodyPart = bodyPart; self.mode = mode
+        self.bodyPart = bodyPart; self.mode = mode; self.muscleLoads = muscleLoads
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, met, mode
         case bodyPart = "body_part"
+        case muscleLoads = "muscle_loads"
     }
 }
 
