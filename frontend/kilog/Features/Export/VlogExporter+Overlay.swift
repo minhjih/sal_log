@@ -81,25 +81,27 @@ extension VlogExporter {
                 let stripBottom = stripTop + stripH
                 guard let clip = segment.clips[row.member.userId] else { continue }
 
-                if clip.clip.videoKey == nil || input.localFiles[clip.id] == nil {
-                    // 영상 없는 클립: 캡션을 스트립 중앙에 크게
-                    let caption = Self.textLayer(clip.caption, size: 24 * fs, weight: .semibold,
-                                                 color: .white, alignment: .center)
-                    caption.frame = CGRect(x: 100 * fs, y: stripTop + stripH / 2 - 32 * fs,
-                                           width: W - 200 * fs, height: 64 * fs)
-                    caption.isWrapped = true
-                    window(caption, from: segStart, to: segEnd, total: totalSec)
-                    overlay.addSublayer(caption)
-                } else {
-                    // 캡션 (중앙 하단)
-                    let caption = Self.textLayer(clip.caption, size: 20 * fs, weight: .medium,
-                                                 color: UIColor.white.withAlphaComponent(0.94),
-                                                 alignment: .center)
-                    caption.frame = CGRect(x: 160 * fs, y: stripBottom - 42 * fs,
-                                           width: W - 320 * fs, height: 26 * fs)
-                    window(caption, from: segStart, to: segEnd, total: totalSec)
-                    overlay.addSublayer(caption)
-                }
+                // 캡션 — 영상 유무와 관계없이 스트립 정중앙
+                // (CATextLayer는 위에서부터 그리므로 실제 텍스트 높이를 재서 세로 중앙 정렬)
+                let captionFont = UIFont.systemFont(ofSize: 24 * fs, weight: .semibold)
+                let captionWidth = W - 200 * fs
+                let captionHeight = ceil((clip.caption as NSString).boundingRect(
+                    with: CGSize(width: captionWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin],
+                    attributes: [.font: captionFont], context: nil
+                ).height) + 2
+                let caption = Self.textLayer(clip.caption, size: 24 * fs, weight: .semibold,
+                                             color: .white, alignment: .center)
+                caption.frame = CGRect(x: 100 * fs,
+                                       y: stripTop + stripH / 2 - captionHeight / 2,
+                                       width: captionWidth, height: captionHeight)
+                caption.isWrapped = true
+                caption.shadowColor = UIColor.black.cgColor
+                caption.shadowOpacity = 0.85
+                caption.shadowRadius = 6 * fs
+                caption.shadowOffset = .zero
+                window(caption, from: segStart, to: segEnd, total: totalSec)
+                overlay.addSublayer(caption)
 
                 // kcal (우하단)
                 if let tag = clip.tag {

@@ -208,6 +208,16 @@ struct TheaterView: View {
             if let clip = side.clip, clip.clip.videoKey != nil {
                 PlayerLayerView(player: player)
                     .opacity(side.active ? 1 : 0.45)
+
+                // 캡션 — 영상 정중앙
+                Text(clip.caption)
+                    .font(.system(size: 15, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.85), radius: 7)
+                    .padding(.horizontal, 16)
+                    .opacity(side.active ? 1 : 0.5)
             } else if let clip = side.clip {
                 Text(clip.caption)
                     .font(.system(size: 13, weight: .semibold))
