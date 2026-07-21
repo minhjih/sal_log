@@ -19,9 +19,9 @@ enum NotificationService {
         let plans: [(id: String, hour: Int, minute: Int, title: String, body: String)] = [
             ("kilog.meal.morning", 8, 0,
              "좋은 아침 ☀️", "아침 먹는 모습, 식사 영상으로 공유해 주세요~"),
-            ("kilog.meal.lunch", 12, 30,
+            ("kilog.meal.lunch", 11, 30,
              "점심시간 🍚", "오늘 점심은 뭐예요? 식사 영상 공유해 주세요~"),
-            ("kilog.meal.evening", 18, 30,
+            ("kilog.meal.evening", 18, 0,
              "저녁이에요 🌙", "저녁 식사 영상 공유해 주세요~ 오늘의 마지막 컷!"),
         ]
 

@@ -63,6 +63,9 @@ struct MemberBodyPanel: View {
     let onScan: () -> Void
     let onManualEntry: () -> Void
 
+    @State private var recordsExpanded = false
+    @State private var measurementToDelete: BodyMeasurement?
+
     private var isMe: Bool { member.userId == app.myId }
     private var profile: BodyProfile? { isMe ? app.myProfile : member.profile }
     private var history: [BodyMeasurement] {
@@ -134,6 +137,10 @@ struct MemberBodyPanel: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
+            if isMe, !history.isEmpty {
+                recordList
+            }
+
             if isMe {
                 HStack(spacing: 8) {
                     Button {
@@ -173,6 +180,89 @@ struct MemberBodyPanel: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(isMe ? Theme.me.opacity(0.2) : Theme.line)
         )
+        .confirmationDialog(
+            "이 기록을 삭제할까요?",
+            isPresented: .init(
+                get: { measurementToDelete != nil },
+                set: { if !$0 { measurementToDelete = nil } }
+            ),
+            presenting: measurementToDelete
+        ) { record in
+            Button("삭제", role: .destructive) {
+                Task { await delete(record) }
+            }
+            Button("취소", role: .cancel) {}
+        } message: { record in
+            Text("\(record.measuredAt.formatted(.dateTime.month().day())) 기록이 삭제돼요. 프로필 수치는 남은 최신 기록으로 다시 맞춰져요.")
+        }
+    }
+
+    // ── 기록 관리 (내 기록만 삭제 가능) ────────────────────
+    private var recordList: some View {
+        VStack(spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { recordsExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text("기록 관리").font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.text)
+                    Spacer()
+                    Text("\(history.count)건")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.faint)
+                    Image(systemName: recordsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+
+            if recordsExpanded {
+                ForEach(history.reversed()) { record in
+                    HStack(spacing: 8) {
+                        Text(record.measuredAt.formatted(.dateTime.month().day()))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 48, alignment: .leading)
+                        Text(recordSummary(record))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.text)
+                        Spacer()
+                        Button {
+                            measurementToDelete = record
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.muted)
+                                .frame(width: 26, height: 26)
+                                .background(Theme.surface2)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Theme.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }
+        .padding(10)
+        .background(Theme.surface2)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func recordSummary(_ record: BodyMeasurement) -> String {
+        var parts = [String(format: "%.1fkg", record.weight)]
+        if let smm = record.skeletalMuscle { parts.append(String(format: "근육 %.1f", smm)) }
+        if let fat = record.bodyFat { parts.append(String(format: "체지방 %.1f%%", fat)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func delete(_ record: BodyMeasurement) async {
+        do {
+            try await BodyService.deleteMeasurement(id: record.id)
+            await app.refreshBootstrap()
+        } catch {
+            app.errorMessage = "기록을 삭제하지 못했어요. 다시 시도해 주세요."
+        }
     }
 
     private var canSeeBody: Bool {
