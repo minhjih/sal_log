@@ -324,14 +324,13 @@ struct TheaterView: View {
                 PlayerLayerView(player: player)
                     .opacity(side.active ? 1 : 0.45)
 
-                // 시간 + 캡션 — 영상 정중앙
+                // 시간 + 캡션 — 영상 정중앙 (시간은 각자 클립의 실제 촬영 시각)
                 VStack(spacing: 5) {
-                    if let timeLabel {
-                        Text(timeLabel)
-                            .font(.system(size: 11.5, weight: .bold))
-                            .kerning(0.8)
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
+                    Text(clip.recordedAt,
+                         format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+                        .font(.system(size: 11.5, weight: .bold))
+                        .kerning(0.8)
+                        .foregroundStyle(.white.opacity(0.8))
                     Text(clip.caption)
                         .font(.system(size: 15, weight: .bold))
                         .multilineTextAlignment(.center)
@@ -343,12 +342,11 @@ struct TheaterView: View {
                 .opacity(side.active ? 1 : 0.5)
             } else if let clip = side.clip {
                 VStack(spacing: 5) {
-                    if let timeLabel {
-                        Text(timeLabel)
-                            .font(.system(size: 11, weight: .bold))
-                            .kerning(0.8)
-                            .foregroundStyle(Theme.faint)
-                    }
+                    Text(clip.recordedAt,
+                         format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute())
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.8)
+                        .foregroundStyle(Theme.faint)
                     Text(clip.caption)
                         .font(.system(size: 13, weight: .semibold))
                         .multilineTextAlignment(.center)
@@ -407,8 +405,9 @@ struct TheaterView: View {
             ForEach(Array(model.segments.enumerated()), id: \.element.id) { i, _ in
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(i < model.index ? 0.85 : 0.28))
-                        if i == model.index {
+                        Capsule().fill(.white.opacity(
+                            model.showUploadPrompt || i < model.index ? 0.85 : 0.28))
+                        if i == model.index, !model.showUploadPrompt {
                             SegmentFillBar(duration: model.currentDuration,
                                            playing: model.playing,
                                            width: geo.size.width)
@@ -416,6 +415,13 @@ struct TheaterView: View {
                     }
                 }
                 .frame(height: 3)
+            }
+
+            // 빈 슬레이트(눌러서 촬영) 칸 — 항상 +1
+            if !model.segments.isEmpty {
+                Capsule()
+                    .fill(.white.opacity(model.showUploadPrompt ? 0.85 : 0.28))
+                    .frame(height: 3)
             }
         }
     }

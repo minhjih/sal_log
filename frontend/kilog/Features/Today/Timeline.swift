@@ -21,17 +21,37 @@ enum Timeline {
     static let maxSegmentSec: Double = 8.0
     static let maxClipSec: Double = 5.0
 
+    /// 서로 정확히 같은 시각에 찍지 않아도 끊기지 않도록, 하루를 몇 개의
+    /// 시간대 버킷(새벽/아침/점심/저녁/밤)으로 나누고 같은 버킷 안에서는
+    /// 멤버별 클립을 순서대로 짝지어 양쪽 트랙이 동시에 연속 재생되게 한다.
     static func buildSegments(_ clips: [TaggedClip]) -> [Segment] {
+        func bucket(_ date: Date) -> Int {
+            switch Calendar.current.component(.hour, from: date) {
+            case 0..<6: return 0    // 새벽
+            case 6..<11: return 1   // 아침
+            case 11..<15: return 2  // 점심
+            case 15..<20: return 3  // 저녁
+            default: return 4       // 밤
+            }
+        }
+
         let sorted = clips.sorted { $0.recordedAt < $1.recordedAt }
+        let grouped = Dictionary(grouping: sorted) { bucket($0.recordedAt) }
+
         var segments: [Segment] = []
-        for clip in sorted {
-            if var last = segments.last,
-               last.clips[clip.userId] == nil,
-               abs(last.time.timeIntervalSince(clip.recordedAt)) <= 60 {
-                last.clips[clip.userId] = clip
-                segments[segments.count - 1] = last
-            } else {
-                segments.append(Segment(time: clip.recordedAt, clips: [clip.userId: clip]))
+        for key in grouped.keys.sorted() {
+            var perUser: [UUID: [TaggedClip]] = [:]
+            for clip in grouped[key]! {
+                perUser[clip.userId, default: []].append(clip)
+            }
+            let rounds = perUser.values.map(\.count).max() ?? 0
+            for k in 0..<rounds {
+                var paired: [UUID: TaggedClip] = [:]
+                for (userId, list) in perUser where k < list.count {
+                    paired[userId] = list[k]
+                }
+                let time = paired.values.map(\.recordedAt).min() ?? Date()
+                segments.append(Segment(time: time, clips: paired))
             }
         }
         return segments
