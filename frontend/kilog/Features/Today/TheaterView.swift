@@ -88,9 +88,17 @@ final class TheaterModel: ObservableObject {
     }
 
     // ── 좌/우 탭 이동 ─────────────────────────────────────
-    /// 빈 슬레이트(다 본 상태)에서 왼쪽 탭 → 마지막 영상 다시, 오른쪽 탭 → 처음부터
+    /// 마지막 영상에서 오른쪽 탭 → 빈 슬레이트(눌러서 촬영),
+    /// 슬레이트에서 왼쪽 탭 → 마지막 영상 다시, 오른쪽 탭 → 처음부터
     func next() {
         if showUploadPrompt { go(to: 0); return }
+        if index >= segments.count - 1 {
+            playing = false
+            topPlayer.pause()
+            bottomPlayer.pause()
+            showUploadPrompt = true
+            return
+        }
         go(to: index + 1)
     }
 

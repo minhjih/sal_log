@@ -22,16 +22,9 @@ extension VlogExporter {
 
         let outroStart = bounds.last ?? Self.introSec
         let stripH = stripHeight
-        let top = contentTop   // 콘텐츠(4:5) 블록 시작 — 위아래는 검은 레터박스
+        let top = contentTop
 
-        // ── 세그먼트 공통: 중앙 이음선 + 줄 하단 그라데이션 + 이름 ──
-        let seam = Self.gradientLayer(
-            colors: [UIColor(Theme.me), UIColor(Theme.lover)],
-            frame: CGRect(x: 0, y: top + stripH - 1.5 * fs, width: W, height: 3 * fs)
-        )
-        window(seam, from: Self.introSec, to: outroStart, total: totalSec)
-        overlay.addSublayer(seam)
-
+        // ── 세그먼트 공통: 줄 하단 그라데이션 + 이름 ──
         for (rowIndex, row) in rows.enumerated() {
             let stripBottom = top + CGFloat(rowIndex + 1) * stripH
             let shade = Self.gradientLayer(
@@ -166,7 +159,8 @@ extension VlogExporter {
         layer.backgroundColor = UIColor(Theme.bg).cgColor
 
         // 블록 높이를 먼저 합산해 전체를 세로 중앙 정렬
-        let imgWidth = 560 * fs
+        // (요약 이미지는 세로 캔버스에 맞춰 크게)
+        let imgWidth = 800 * fs
         func scaledHeight(_ image: CGImage) -> CGFloat {
             imgWidth * CGFloat(image.height) / CGFloat(image.width)
         }
