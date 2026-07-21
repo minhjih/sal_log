@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 해부학 스타일 근육 자극도 피규어 (앞/뒤).
 /// 회색 인체 실루엣 위에 개별 근육 셰이프를 그리고,
@@ -46,21 +47,28 @@ struct MuscleFigure: View {
             let bodyPath = Self.blob(scaled(Self.bodyOutline))
             context.fill(bodyPath, with: .color(Color(white: 0.24)))
 
-            // 2) 근육 셰이프
+            // 2) 근육 셰이프 — 불투명 보간 색으로 채워
+            //    셰이프가 겹쳐도 이음선(이중 칠)이 생기지 않는다
+            var mr: CGFloat = 0, mg: CGFloat = 0, mb: CGFloat = 0, ma: CGFloat = 0
+            UIColor(color).getRed(&mr, &mg, &mb, alpha: &ma)
+            func fillColor(_ level: Double) -> Color {
+                let t = level <= 0.01 ? 0 : CGFloat(0.2 + 0.8 * level)
+                let base: CGFloat = 0.34
+                return Color(red: base + (mr - base) * t,
+                             green: base + (mg - base) * t,
+                             blue: base + (mb - base) * t)
+            }
+
             let muscles = side == .front ? Self.frontMuscles : Self.backMuscles
             for muscle in muscles {
                 let variants = muscle.mirrored
                     ? [muscle.points, mirroredPts(muscle.points)]
                     : [muscle.points]
                 let level = min(1, max(0, intensity(muscle.group)))
+                let fill = fillColor(level)
 
                 for pts in variants {
-                    let path = Self.blob(scaled(pts))
-                    // 미자극: 실루엣보다 살짝 밝은 회색으로 근육 윤곽만
-                    context.fill(path, with: .color(Color(white: 0.34)))
-                    if level > 0.01 {
-                        context.fill(path, with: .color(color.opacity(0.2 + 0.8 * level)))
-                    }
+                    context.fill(Self.blob(scaled(pts)), with: .color(fill))
                 }
             }
         }
