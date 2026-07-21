@@ -216,33 +216,15 @@ struct TheaterView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let stripH = geo.size.height / 2
+            let stripH = (geo.size.height - 6) / 2
             ZStack {
-                VStack(spacing: 0) {
+                // 멤버 카드 두 장 (레퍼런스처럼 분리된 라운드 카드)
+                VStack(spacing: 6) {
                     strip(userId: model.topUserId, player: model.topPlayer, height: stripH)
                     strip(userId: model.bottomUserId, player: model.bottomPlayer, height: stripH)
                 }
 
-                // 중앙 이음선 (시그니처 그라데이션)
-                Rectangle()
-                    .fill(Theme.duo)
-                    .frame(height: 2)
-
-                // 시간 칩
-                if model.index < model.segments.count {
-                    VStack {
-                        Text(model.segments[model.index].timeLabel)
-                            .font(.system(size: 11.5, weight: .bold))
-                            .kerning(0.8)
-                            .padding(.horizontal, 11).padding(.vertical, 4)
-                            .background(.black.opacity(0.55))
-                            .clipShape(Capsule())
-                            .padding(.top, 10)
-                        Spacer()
-                    }
-                }
-
-                if !model.playing {
+                if !model.playing, !model.showUploadPrompt, !model.segments.isEmpty {
                     Image(systemName: "play.fill")
                         .font(.system(size: 34))
                         .foregroundStyle(.white.opacity(0.85))
@@ -255,14 +237,6 @@ struct TheaterView: View {
                     progressBar
                         .padding(.horizontal, 10)
                         .padding(.bottom, 8)
-                }
-
-                if model.segments.isEmpty {
-                    Text("아직 오늘의 영상이 없어요.\n첫 장면을 찍어볼까요?")
-                        .font(.system(size: 13.5))
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(5)
-                        .foregroundStyle(Theme.muted)
                 }
 
                 // 탭 존: 왼쪽 = 이전 · 중앙 = 재생/일시정지 · 오른쪽 = 다음
@@ -278,59 +252,57 @@ struct TheaterView: View {
                     }
                 }
 
-                // 오늘 클립을 다 봤을 때: 새 영상 요청 안내
-                if model.showUploadPrompt {
-                    uploadPrompt
+                // 카드 위 알약 버튼 (탭 존보다 위 레이어)
+                VStack(spacing: 6) {
+                    cardActions(userId: model.topUserId, height: stripH)
+                    cardActions(userId: model.bottomUserId, height: stripH)
                 }
             }
         }
         .aspectRatio(4 / 5, contentMode: .fit)
         .background(Color(hex: "#101016"))
         .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.line))
     }
 
-    // ── 다 봤을 때 안내 ───────────────────────────────────
-    private var uploadPrompt: some View {
-        VStack(spacing: 12) {
-            Text("오늘 올라온 장면은 다 봤어요!")
-                .font(.system(size: 15, weight: .bold))
-            Text("새 영상이 올라올 때까지, 내 장면을 먼저 찍어볼까요?")
-                .font(.system(size: 12))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .foregroundStyle(.white.opacity(0.75))
+    // ── 카드별 액션 알약 ──────────────────────────────────
+    /// 내 카드: 내 영상이 없거나 다 봤을 때 "눌러서 촬영"
+    /// 파트너 카드: 다 봤을 때 "처음부터 다시 보기"
+    @ViewBuilder
+    private func cardActions(userId: UUID?, height: CGFloat) -> some View {
+        let isMe = userId != nil && userId == app.myId
+        let myClipMissing: Bool = {
+            guard let userId, model.index < model.segments.count else {
+                return model.segments.isEmpty
+            }
+            return model.segments[model.index].clips[userId] == nil
+        }()
 
-            HStack(spacing: 8) {
-                Button {
-                    onCapture()
-                } label: {
-                    Text("지금 찍기")
-                        .font(.system(size: 13, weight: .bold))
-                        .padding(.horizontal, 18).padding(.vertical, 10)
-                        .background(Theme.duo)
-                        .foregroundStyle(Color(hex: "#101016"))
-                        .clipShape(Capsule())
-                }
-                Button {
-                    model.replay()
-                } label: {
-                    Text("처음부터 다시 보기")
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(.white.opacity(0.14))
-                        .foregroundStyle(.white)
-                        .clipShape(Capsule())
-                }
+        ZStack {
+            if isMe, model.showUploadPrompt || myClipMissing {
+                pill("눌러서 촬영") { onCapture() }
+                    .offset(y: 18)
+            } else if !isMe, model.showUploadPrompt {
+                pill("처음부터 다시 보기") { model.replay() }
+                    .offset(y: 18)
             }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.66))
-        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
     }
 
-    // ── 한 줄(트랙) ───────────────────────────────────────
+    private func pill(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13.5, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20).padding(.vertical, 11)
+                .background(.white.opacity(0.14))
+                .background(.black.opacity(0.5))
+                .clipShape(Capsule())
+        }
+    }
+
+    // ── 멤버 카드 한 장 ───────────────────────────────────
     @ViewBuilder
     private func strip(userId: UUID?, player: AVPlayer, height: CGFloat) -> some View {
         let side: (clip: TaggedClip?, active: Bool) = {
@@ -338,8 +310,12 @@ struct TheaterView: View {
             return Timeline.sideAt(model.segments, index: model.index, userId: userId)
         }()
         let member = userId.flatMap { app.member(for: $0) }
+        let timeLabel = model.index < model.segments.count
+            ? model.segments[model.index].timeLabel : nil
 
         ZStack {
+            Color(hex: "#17171f")
+
             if let clip = side.clip, clip.clip.videoKey != nil {
                 PlayerLayerView(player: player)
                     .opacity(side.active ? 1 : 0.45)
@@ -360,16 +336,38 @@ struct TheaterView: View {
                     .lineSpacing(4)
                     .foregroundStyle(side.active ? Theme.text : Theme.faint)
                     .padding(14)
-            } else {
-                Text(member?.initial ?? "·")
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(member.map { Color(hex: $0.colorHex) } ?? Theme.faint)
-                    .opacity(0.22)
+            } else if let timeLabel {
+                // 빈 자리: 시간 워터마크 (레퍼런스의 14:00 느낌)
+                Text(timeLabel)
+                    .font(.system(size: 38, weight: .heavy))
+                    .kerning(2)
+                    .foregroundStyle(.white.opacity(0.1))
+                    .offset(y: -16)
             }
 
-            // 이름 (좌하단) · 태그 kcal (우상단)
+            // 다 봤을 때는 카드 전체를 살짝 딤
+            if model.showUploadPrompt {
+                Color.black.opacity(0.45).allowsHitTesting(false)
+            }
+
+            // 헤더 (좌상단 아바타+이름) · kcal (우상단)
             VStack {
                 HStack {
+                    if let member {
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(Color(hex: member.colorHex))
+                                .frame(width: 22, height: 22)
+                                .overlay(Text(member.initial)
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundStyle(Color(hex: "#101016")))
+                            Text(member.displayName)
+                                .font(.system(size: 11.5, weight: .bold))
+                                .kerning(0.4)
+                                .foregroundStyle(.white.opacity(0.88))
+                                .shadow(color: .black.opacity(0.7), radius: 5)
+                        }
+                    }
                     Spacer()
                     if side.active, let tag = side.clip?.tag {
                         Text("\(tag.isMove ? "−" : "+")\(tag.kcal)")
@@ -378,26 +376,15 @@ struct TheaterView: View {
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(.black.opacity(0.55))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .padding(10)
                     }
                 }
+                .padding(10)
                 Spacer()
-                HStack {
-                    if side.active, let member {
-                        Text(member.displayName)
-                            .font(.system(size: 10.5, weight: .bold))
-                            .kerning(0.5)
-                            .foregroundStyle(Color(hex: member.colorHex))
-                            .shadow(color: .black.opacity(0.7), radius: 6)
-                            .padding(.leading, 12).padding(.bottom, 12)
-                    }
-                    Spacer()
-                }
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
-        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var progressBar: some View {
