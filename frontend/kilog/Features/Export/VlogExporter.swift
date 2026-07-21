@@ -6,7 +6,9 @@ import SwiftUI
 /// 하루의 클립들을 인스타 스토리용 세로(9:16) 브이로그 한 편으로 합성.
 ///
 ///  · 캔버스: 1080×1920 (스토리 규격)
-///  · 콘텐츠: 캔버스 전체를 위/아래 두 줄로 세로 스택 (레터박스 없음)
+///  · 콘텐츠: 앱 오늘 탭에 보이는 그대로의 4:5(1080×1350) 두 줄 스택을
+///    세로 중앙에 배치 — 나머지 위아래는 검은색 레터박스
+///  · 두 줄 사이는 오늘 탭 카드처럼 검은 간격으로 분리
 ///  · 인트로(1.4s) → 세그먼트 → 아웃트로(4s)
 ///  · 실제 영상은 AVMutableComposition 트랙에 배치하고 transform/crop으로 줄에 맞춤
 ///  · 텍스트/그라데이션/칩 오버레이는 CoreAnimationTool의 CALayer로 렌더
@@ -14,8 +16,8 @@ final class VlogExporter {
 
     /// 스토리 캔버스 (9:16)
     static let canvasSize = CGSize(width: 1080, height: 1920)
-    /// 콘텐츠 영역 — 캔버스 전체 (두 줄 세로 스택)
-    static let contentSize = CGSize(width: 1080, height: 1920)
+    /// 실제 콘텐츠 영역 — 앱 화면과 동일한 4:5
+    static let contentSize = CGSize(width: 1080, height: 1350)
 
     static let introSec = 1.4
     static let outroSec = 4.0   // 근육 부하·체중 비교까지 보여줄 시간

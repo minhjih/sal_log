@@ -22,7 +22,17 @@ extension VlogExporter {
 
         let outroStart = bounds.last ?? Self.introSec
         let stripH = stripHeight
-        let top = contentTop
+        let top = contentTop   // 콘텐츠(4:5) 블록 시작 — 위아래는 검은 레터박스
+
+        // ── 두 줄 사이 검은 간격 (오늘 탭 카드 스택 느낌) ──
+        if rows.count > 1 {
+            let divider = CALayer()
+            divider.frame = CGRect(x: 0, y: top + stripH - 4 * fs,
+                                   width: W, height: 8 * fs)
+            divider.backgroundColor = UIColor.black.cgColor
+            window(divider, from: Self.introSec, to: outroStart, total: totalSec)
+            overlay.addSublayer(divider)
+        }
 
         // ── 세그먼트 공통: 줄 하단 그라데이션 + 이름 ──
         for (rowIndex, row) in rows.enumerated() {

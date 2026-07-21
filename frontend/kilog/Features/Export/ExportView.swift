@@ -22,7 +22,7 @@ struct ExportView: View {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 12) {
-                Text("인스타 스토리 규격(9:16) · 두 사람 세로 스택")
+                Text("인스타 스토리 규격(9:16) · 오늘 탭 그대로 + 검은 여백")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
 
