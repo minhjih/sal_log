@@ -98,6 +98,14 @@ struct ExportView: View {
         .onDisappear { player?.pause() }
     }
 
+    /// 요약 카드를 CGImage로 렌더 (아웃트로 배경색과 같은 배경을 깔아 불투명 렌더)
+    private func renderCard<V: View>(_ view: V) -> CGImage? {
+        let renderer = ImageRenderer(content: view.background(Theme.bg))
+        renderer.scale = 3
+        renderer.isOpaque = true
+        return renderer.cgImage
+    }
+
     private func barButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -153,6 +161,17 @@ struct ExportView: View {
             dateFormatter.locale = Locale(identifier: "ko_KR")
             dateFormatter.dateFormat = "M.d E"
 
+            // 아웃트로 요약 이미지 — 오늘의 근육 부하 + 체중 추이 비교
+            let members = [myMember] + (app.partner.map { [$0] } ?? [])
+            let muscleImage = app.feed.workouts.isEmpty ? nil : renderCard(
+                ExportMuscleCard(members: members, workouts: app.feed.workouts)
+                    .frame(width: 440, height: 200)
+            )
+            let weightImage = members.contains(where: { $0.measurements.count >= 2 })
+                ? renderCard(ExportWeightCard(members: members)
+                    .frame(width: 440, height: 180))
+                : nil
+
             let input = VlogExporter.Input(
                 segments: Timeline.buildSegments(clips),
                 localFiles: localFiles,
@@ -161,7 +180,9 @@ struct ExportView: View {
                 bottomRow: app.partner.map {
                     .init(member: $0, stats: app.stats(for: $0.userId))
                 },
-                dateLabel: dateFormatter.string(from: Date())
+                dateLabel: dateFormatter.string(from: Date()),
+                muscleImage: muscleImage,
+                weightImage: weightImage
             )
 
             let output = try await VlogExporter().export(input) { p in

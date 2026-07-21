@@ -19,7 +19,7 @@ final class VlogExporter {
     static let contentSize = CGSize(width: 1080, height: 1350)
 
     static let introSec = 1.4
-    static let outroSec = 2.2
+    static let outroSec = 4.0   // 근육 부하·체중 비교까지 보여줄 시간
 
     var size: CGSize { Self.canvasSize }
     /// 콘텐츠(4:5) 블록의 세로 시작 위치 (위아래 레터박스 여백)
@@ -42,6 +42,9 @@ final class VlogExporter {
         let topRow: Row
         let bottomRow: Row?
         let dateLabel: String
+        /// 아웃트로 요약 이미지 (ExportView에서 ImageRenderer로 렌더)
+        var muscleImage: CGImage?
+        var weightImage: CGImage?
     }
 
     enum ExportError: LocalizedError {
