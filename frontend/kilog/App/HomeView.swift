@@ -79,11 +79,12 @@ struct HomeView: View {
             Spacer()
 
             HStack(spacing: 10) {
+                // 그룹 관리 · 초대
                 Button {
                     showGroup = true
                 } label: {
-                    Text("\(app.members.count)")
-                        .font(.system(size: 12, weight: .heavy))
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.lover)
                         .frame(width: 36, height: 36)
                         .background(Theme.surface)

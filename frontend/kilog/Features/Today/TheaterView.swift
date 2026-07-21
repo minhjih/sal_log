@@ -11,6 +11,8 @@ final class TheaterModel: ObservableObject {
     @Published var segments: [Segment] = []
     @Published var index = 0
     @Published var playing = true
+    /// 오늘 클립을 전부 봤을 때: 새 영상 올려달라는 안내 표시
+    @Published var showUploadPrompt = false
 
     let topPlayer = AVPlayer()
     let bottomPlayer = AVPlayer()
@@ -18,6 +20,9 @@ final class TheaterModel: ObservableObject {
     private var durations: [UUID: Double] = [:]   // clipId → 실제 영상 길이(초)
     private var itemCache: [UUID: AVPlayerItem] = [:]
     private var advanceTask: Task<Void, Never>?
+    /// 이미 본 클립 id — 다음에 열 때 안 본 것부터 재생
+    private var watched: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "kilog.watchedClips") ?? [])
 
     var topUserId: UUID?
     var bottomUserId: UUID?
@@ -39,9 +44,66 @@ final class TheaterModel: ObservableObject {
         let new = next.map(\.clips).map { Set($0.values.map(\.id)) }
         let newCache = clips.contains { itemCache[$0.id] == nil && localFiles[$0.id] != nil }
         guard old != new || newCache else { return }
+        let compositionChanged = old != new
         segments = next
-        index = min(index, max(0, segments.count - 1))
+
+        if compositionChanged {
+            // 지난 클립 id는 정리 (클립은 7일 뒤 삭제되므로 오늘 것만 유지)
+            let todayIds = Set(next.flatMap { $0.clips.values.map(\.id.uuidString) })
+            watched.formIntersection(todayIds)
+            persistWatched()
+
+            if allClipsWatched {
+                // 전부 본 상태로 열림 → 새 영상 올려달라는 안내
+                index = 0
+                playing = false
+                showUploadPrompt = true
+            } else {
+                // 안 본 첫 세그먼트부터
+                index = firstUnwatchedIndex ?? 0
+                if showUploadPrompt { playing = true }   // 안내 중 새 클립 도착 → 바로 재생
+                showUploadPrompt = false
+            }
+        } else {
+            index = min(index, max(0, segments.count - 1))
+        }
         Task { await preload(clips: clips, localFiles: localFiles) }
+        schedule()
+    }
+
+    // ── 시청 기록 ─────────────────────────────────────────
+    private var allClipsWatched: Bool {
+        let ids = segments.flatMap { $0.clips.values.map(\.id.uuidString) }
+        return !ids.isEmpty && ids.allSatisfy(watched.contains)
+    }
+
+    private var firstUnwatchedIndex: Int? {
+        segments.firstIndex {
+            $0.clips.values.contains { !watched.contains($0.id.uuidString) }
+        }
+    }
+
+    private func persistWatched() {
+        UserDefaults.standard.set(Array(watched), forKey: "kilog.watchedClips")
+    }
+
+    // ── 좌/우 탭 이동 ─────────────────────────────────────
+    func next() { go(to: index + 1) }
+    func previous() { go(to: index - 1) }
+
+    private func go(to i: Int) {
+        guard !segments.isEmpty else { return }
+        index = (i + segments.count) % segments.count
+        playing = true
+        showUploadPrompt = false
+        schedule()
+    }
+
+    /// 안내에서 "처음부터 다시 보기"
+    func replay() {
+        showUploadPrompt = false
+        index = 0
+        playing = true
         schedule()
     }
 
@@ -50,6 +112,7 @@ final class TheaterModel: ObservableObject {
         if let i = segments.firstIndex(where: { $0.clips.values.contains { $0.id == clipId } }) {
             index = i
             playing = true
+            showUploadPrompt = false
             schedule()
         }
     }
@@ -73,12 +136,27 @@ final class TheaterModel: ObservableObject {
         applyTrack(player: topPlayer, userId: topUserId)
         applyTrack(player: bottomPlayer, userId: bottomUserId)
 
+        // 지금 보고 있는 세그먼트의 클립은 시청 처리
+        for clip in segments[index].clips.values {
+            watched.insert(clip.id.uuidString)
+        }
+        persistWatched()
+
         let duration = currentDuration
         advanceTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(duration))
             guard let self, !Task.isCancelled else { return }
-            self.index = (self.index + 1) % max(1, self.segments.count)
-            self.schedule()
+            let nextIndex = (self.index + 1) % max(1, self.segments.count)
+            if nextIndex == 0, self.allClipsWatched {
+                // 한 바퀴 다 봤음 → 새 영상 올려달라는 안내
+                self.playing = false
+                self.topPlayer.pause()
+                self.bottomPlayer.pause()
+                self.showUploadPrompt = true
+            } else {
+                self.index = nextIndex
+                self.schedule()
+            }
         }
     }
 
@@ -134,6 +212,7 @@ final class TheaterModel: ObservableObject {
 struct TheaterView: View {
     @EnvironmentObject private var app: AppState
     @ObservedObject var model: TheaterModel
+    var onCapture: () -> Void = {}
 
     var body: some View {
         GeometryReader { geo in
@@ -185,14 +264,70 @@ struct TheaterView: View {
                         .lineSpacing(5)
                         .foregroundStyle(Theme.muted)
                 }
+
+                // 탭 존: 왼쪽 = 이전 · 중앙 = 재생/일시정지 · 오른쪽 = 다음
+                if !model.segments.isEmpty {
+                    HStack(spacing: 0) {
+                        Color.clear.contentShape(Rectangle())
+                            .onTapGesture { model.previous() }
+                        Color.clear.contentShape(Rectangle())
+                            .frame(width: geo.size.width * 0.34)
+                            .onTapGesture { model.togglePlay() }
+                        Color.clear.contentShape(Rectangle())
+                            .onTapGesture { model.next() }
+                    }
+                }
+
+                // 오늘 클립을 다 봤을 때: 새 영상 요청 안내
+                if model.showUploadPrompt {
+                    uploadPrompt
+                }
             }
         }
         .aspectRatio(4 / 5, contentMode: .fit)
         .background(Color(hex: "#101016"))
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.line))
+    }
+
+    // ── 다 봤을 때 안내 ───────────────────────────────────
+    private var uploadPrompt: some View {
+        VStack(spacing: 12) {
+            Text("오늘 올라온 장면은 다 봤어요!")
+                .font(.system(size: 15, weight: .bold))
+            Text("새 영상이 올라올 때까지, 내 장면을 먼저 찍어볼까요?")
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .foregroundStyle(.white.opacity(0.75))
+
+            HStack(spacing: 8) {
+                Button {
+                    onCapture()
+                } label: {
+                    Text("지금 찍기")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .background(Theme.duo)
+                        .foregroundStyle(Color(hex: "#101016"))
+                        .clipShape(Capsule())
+                }
+                Button {
+                    model.replay()
+                } label: {
+                    Text("처음부터 다시 보기")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(.white.opacity(0.14))
+                        .foregroundStyle(.white)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.66))
         .contentShape(Rectangle())
-        .onTapGesture { model.togglePlay() }
     }
 
     // ── 한 줄(트랙) ───────────────────────────────────────

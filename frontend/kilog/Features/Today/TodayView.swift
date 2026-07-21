@@ -12,7 +12,7 @@ struct TodayView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                TheaterView(model: theater)
+                TheaterView(model: theater, onCapture: onCapture)
 
                 recordCTA
 
