@@ -37,6 +37,7 @@ final class AppState: ObservableObject {
     let catalogs = Catalogs()
     private var realtimeChannel: RealtimeChannelV2?
     private var authTask: Task<Void, Never>?
+    private var remindersScheduled = false
 
     var myId: UUID? { me?.id }
 
@@ -107,6 +108,12 @@ final class AppState: ObservableObject {
                 }
                 phase = .ready
                 await subscribeRealtime()
+
+                // 아침·점심·저녁 식사 영상 리마인더 (세션당 1회 등록)
+                if !remindersScheduled {
+                    remindersScheduled = true
+                    Task { await NotificationService.scheduleMealReminders() }
+                }
             }
         } catch {
             if AuthService.currentUserId == nil {
@@ -160,6 +167,8 @@ final class AppState: ObservableObject {
 
     func signOut() async {
         await AuthService.signOut()
+        NotificationService.cancelMealReminders()
+        remindersScheduled = false
         reset()
     }
 

@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var showCapture = false
     @State private var showGroup = false
     @State private var showScan = false
+    @State private var showManualEntry = false
     @State private var showExport = false
     @State private var showProfile = false
 
@@ -28,7 +29,8 @@ struct HomeView: View {
                 case .metrics:
                     MetricsView()
                 case .body:
-                    BodyView(onScan: { showScan = true })
+                    BodyView(onScan: { showScan = true },
+                             onManualEntry: { showManualEntry = true })
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -46,6 +48,9 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showScan) {
             ScanFlowView(firstTime: false)
+        }
+        .fullScreenCover(isPresented: $showManualEntry) {
+            ScanFlowView(firstTime: false, startManual: true)
         }
         .fullScreenCover(isPresented: $app.needsOnboardingScan) {
             ScanFlowView(firstTime: true)
@@ -74,11 +79,12 @@ struct HomeView: View {
             Spacer()
 
             HStack(spacing: 10) {
+                // 그룹 관리 · 초대
                 Button {
                     showGroup = true
                 } label: {
-                    Text("\(app.members.count)")
-                        .font(.system(size: 12, weight: .heavy))
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.lover)
                         .frame(width: 36, height: 36)
                         .background(Theme.surface)

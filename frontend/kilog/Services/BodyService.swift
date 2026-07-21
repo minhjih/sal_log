@@ -59,6 +59,15 @@ enum BodyService {
             .execute()
     }
 
+    /// 측정 기록 삭제 (RLS: 본인 것만).
+    /// 최신 기록을 지우면 서버 트리거가 profiles를 남은 최신 값으로 재동기화.
+    static func deleteMeasurement(id: UUID) async throws {
+        try await Supa.client.from("body_measurements")
+            .delete()
+            .eq("id", value: id)
+            .execute()
+    }
+
     static func history(userId: UUID, limit: Int = 24) async throws -> [BodyMeasurement] {
         try await Supa.client.from("body_measurements")
             .select()

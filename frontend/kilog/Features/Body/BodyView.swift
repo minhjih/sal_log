@@ -6,6 +6,7 @@ import Foundation
 struct BodyView: View {
     @EnvironmentObject private var app: AppState
     let onScan: () -> Void
+    let onManualEntry: () -> Void
 
     var body: some View {
         ScrollView {
@@ -23,7 +24,8 @@ struct BodyView: View {
                 sharedBanner
 
                 ForEach(app.members) { member in
-                    MemberBodyPanel(member: member, onScan: onScan)
+                    MemberBodyPanel(member: member, onScan: onScan,
+                                    onManualEntry: onManualEntry)
                 }
 
                 Text("민감한 신체 데이터는 그룹 연결 및 항목별 공유 동의가 완료된 멤버끼리만 서버(RLS)에서 내려줘요. 공유 설정은 그룹 관리에서 바꿀 수 있어요.")
@@ -59,6 +61,10 @@ struct MemberBodyPanel: View {
     @EnvironmentObject private var app: AppState
     let member: MemberOverview
     let onScan: () -> Void
+    let onManualEntry: () -> Void
+
+    @State private var recordsExpanded = false
+    @State private var measurementToDelete: BodyMeasurement?
 
     private var isMe: Bool { member.userId == app.myId }
     private var profile: BodyProfile? { isMe ? app.myProfile : member.profile }
@@ -131,19 +137,39 @@ struct MemberBodyPanel: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
 
+            if isMe, !history.isEmpty {
+                recordList
+            }
+
             if isMe {
-                Button {
-                    onScan()
-                } label: {
-                    Text("⌞ ⌝  내 새 인바디 검사지 스캔")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(Theme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(13)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
-                        )
+                HStack(spacing: 8) {
+                    Button {
+                        onScan()
+                    } label: {
+                        Text("⌞ ⌝  인바디 스캔")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(13)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
+                            )
+                    }
+
+                    Button {
+                        onManualEntry()
+                    } label: {
+                        Text("✎  직접 입력")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(13)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
+                            )
+                    }
                 }
             }
         }
@@ -154,6 +180,89 @@ struct MemberBodyPanel: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(isMe ? Theme.me.opacity(0.2) : Theme.line)
         )
+        .confirmationDialog(
+            "이 기록을 삭제할까요?",
+            isPresented: .init(
+                get: { measurementToDelete != nil },
+                set: { if !$0 { measurementToDelete = nil } }
+            ),
+            presenting: measurementToDelete
+        ) { record in
+            Button("삭제", role: .destructive) {
+                Task { await delete(record) }
+            }
+            Button("취소", role: .cancel) {}
+        } message: { record in
+            Text("\(record.measuredAt.formatted(.dateTime.month().day())) 기록이 삭제돼요. 프로필 수치는 남은 최신 기록으로 다시 맞춰져요.")
+        }
+    }
+
+    // ── 기록 관리 (내 기록만 삭제 가능) ────────────────────
+    private var recordList: some View {
+        VStack(spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { recordsExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text("기록 관리").font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.text)
+                    Spacer()
+                    Text("\(history.count)건")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.faint)
+                    Image(systemName: recordsExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+
+            if recordsExpanded {
+                ForEach(history.reversed()) { record in
+                    HStack(spacing: 8) {
+                        Text(record.measuredAt.formatted(.dateTime.month().day()))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 48, alignment: .leading)
+                        Text(recordSummary(record))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.text)
+                        Spacer()
+                        Button {
+                            measurementToDelete = record
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.muted)
+                                .frame(width: 26, height: 26)
+                                .background(Theme.surface2)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Theme.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }
+        .padding(10)
+        .background(Theme.surface2)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func recordSummary(_ record: BodyMeasurement) -> String {
+        var parts = [String(format: "%.1fkg", record.weight)]
+        if let smm = record.skeletalMuscle { parts.append(String(format: "근육 %.1f", smm)) }
+        if let fat = record.bodyFat { parts.append(String(format: "체지방 %.1f%%", fat)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func delete(_ record: BodyMeasurement) async {
+        do {
+            try await BodyService.deleteMeasurement(id: record.id)
+            await app.refreshBootstrap()
+        } catch {
+            app.errorMessage = "기록을 삭제하지 못했어요. 다시 시도해 주세요."
+        }
     }
 
     private var canSeeBody: Bool {
