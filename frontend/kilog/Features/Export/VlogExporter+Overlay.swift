@@ -119,7 +119,9 @@ extension VlogExporter {
         }
 
         // ── 아웃트로 ──────────────────────────────────────
-        overlay.addSublayer(outroLayer(rows: rows, from: outroStart, total: totalSec))
+        overlay.addSublayer(outroLayer(
+            input: input, rows: rows, from: outroStart, total: totalSec
+        ))
 
         return overlay
     }
@@ -154,18 +156,35 @@ extension VlogExporter {
     }
 
     // ── 아웃트로 (세로 중앙 정렬 — 모든 화면비 대응) ───────
-    private func outroLayer(rows: [Row], from start: Double, total: Double) -> CALayer {
+    /// 밸런스 카드 + 오늘의 근육 부하 비교 + 체중 추이 비교
+    private func outroLayer(
+        input: Input, rows: [Row], from start: Double, total: Double
+    ) -> CALayer {
         let W = size.width, H = size.height
         let layer = CALayer()
         layer.frame = CGRect(origin: .zero, size: size)
         layer.backgroundColor = UIColor(Theme.bg).cgColor
 
+        // 블록 높이를 먼저 합산해 전체를 세로 중앙 정렬
+        let imgWidth = 560 * fs
+        func scaledHeight(_ image: CGImage) -> CGFloat {
+            imgWidth * CGFloat(image.height) / CGFloat(image.width)
+        }
+        let cardH = 220 * fs
+        var totalH = 30 * fs + 14 * fs + cardH
+        if let img = input.muscleImage { totalH += 22 * fs + scaledHeight(img) }
+        if let img = input.weightImage { totalH += 18 * fs + scaledHeight(img) }
+        totalH += 26 * fs + 3 * fs + 12 * fs + 24 * fs
+
+        var cursor = max(40 * fs, (H - totalH) / 2)
+
         let heading = Self.textLayer("오늘, 우리", size: 22 * fs, weight: .medium,
                                      color: UIColor(Theme.muted), alignment: .center)
-        heading.frame = CGRect(x: 0, y: H / 2 - 190 * fs, width: W, height: 30 * fs)
+        heading.frame = CGRect(x: 0, y: cursor, width: W, height: 30 * fs)
         layer.addSublayer(heading)
+        cursor += 30 * fs + 14 * fs
 
-        let cardTop = H / 2 - 140 * fs
+        let cardTop = cursor
         for (i, row) in rows.prefix(2).enumerated() {
             let centerX = W / 2 + (rows.count == 1 ? 0 : (i == 0 ? -130 * fs : 130 * fs))
             let card = CALayer()
@@ -206,18 +225,39 @@ extension VlogExporter {
                                   width: 220 * fs, height: 22 * fs)
             layer.addSublayer(detail)
         }
+        cursor += cardH
 
+        // 요약 이미지 (근육 부하 → 체중 추이)
+        // 부모 overlay가 isGeometryFlipped라 이미지 레이어도 flip을 한 번 더 해
+        // 비트맵이 뒤집히지 않게 한다 (flip 횟수 짝수 = 정방향)
+        func addImage(_ image: CGImage, gap: CGFloat) {
+            cursor += gap
+            let h = scaledHeight(image)
+            let imgLayer = CALayer()
+            imgLayer.frame = CGRect(x: (W - imgWidth) / 2, y: cursor,
+                                    width: imgWidth, height: h)
+            imgLayer.contents = image
+            imgLayer.contentsGravity = .resizeAspect
+            imgLayer.isGeometryFlipped = true
+            layer.addSublayer(imgLayer)
+            cursor += h
+        }
+        if let img = input.muscleImage { addImage(img, gap: 22 * fs) }
+        if let img = input.weightImage { addImage(img, gap: 18 * fs) }
+
+        cursor += 26 * fs
         let underline = Self.gradientLayer(
             colors: [UIColor(Theme.me), UIColor(Theme.lover)],
-            frame: CGRect(x: W / 2 - 38 * fs, y: H / 2 + 118 * fs,
+            frame: CGRect(x: W / 2 - 38 * fs, y: cursor,
                           width: 76 * fs, height: 3 * fs)
         )
         layer.addSublayer(underline)
+        cursor += 3 * fs + 12 * fs
 
         let tagline = Self.textLayer("ki—log · 같은 하루, 같은 다짐",
                                      size: 18 * fs, weight: .medium,
                                      color: UIColor(Theme.faint), alignment: .center)
-        tagline.frame = CGRect(x: 0, y: H / 2 + 148 * fs, width: W, height: 24 * fs)
+        tagline.frame = CGRect(x: 0, y: cursor, width: W, height: 24 * fs)
         layer.addSublayer(tagline)
 
         window(layer, from: start, to: total, total: total, fadeIn: 0.4)

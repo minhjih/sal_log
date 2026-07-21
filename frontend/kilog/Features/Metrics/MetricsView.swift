@@ -4,7 +4,7 @@ import Foundation
 
 /// 지표 탭: 서로의 건강 지표를 확인·비교
 ///  · 인체 모형 근육 부하 비교 (최근 7일)
-///  · 변화 그래프 (체지방률/골격근량/체중 토글)
+///  · 변화 그래프 (체중/체지방률/골격근량 토글)
 struct MetricsView: View {
     @EnvironmentObject private var app: AppState
 
@@ -45,20 +45,20 @@ struct MetricsView: View {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 변화 추이 그래프 — 체지방률/골격근량/체중 토글, 멤버별 라인
+// 변화 추이 그래프 — 체중/체지방률/골격근량 토글, 멤버별 라인
 // ═══════════════════════════════════════════════════════════
 struct TrendChartCard: View {
     @EnvironmentObject private var app: AppState
 
     enum Metric: String, CaseIterable {
+        case weight = "체중"
         case bodyFat = "체지방률"
         case muscle = "골격근량"
-        case weight = "체중"
 
         var unit: String { self == .bodyFat ? "%" : "kg" }
     }
 
-    @State private var metric: Metric = .bodyFat
+    @State private var metric: Metric = .weight
 
     struct Point: Identifiable {
         let id: UUID
