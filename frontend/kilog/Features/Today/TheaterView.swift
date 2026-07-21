@@ -54,8 +54,8 @@ final class TheaterModel: ObservableObject {
             persistWatched()
 
             if allClipsWatched {
-                // 전부 본 상태로 열림 → 새 영상 올려달라는 안내
-                index = 0
+                // 전부 본 상태로 열림 → 빈 슬레이트 (왼쪽 탭이 마지막 영상으로 가도록 index는 끝에)
+                index = max(0, segments.count - 1)
                 playing = false
                 showUploadPrompt = true
             } else {
@@ -88,22 +88,27 @@ final class TheaterModel: ObservableObject {
     }
 
     // ── 좌/우 탭 이동 ─────────────────────────────────────
-    func next() { go(to: index + 1) }
-    func previous() { go(to: index - 1) }
+    /// 빈 슬레이트(다 본 상태)에서 왼쪽 탭 → 마지막 영상 다시, 오른쪽 탭 → 처음부터
+    func next() {
+        if showUploadPrompt { go(to: 0); return }
+        go(to: index + 1)
+    }
+
+    func previous() {
+        if showUploadPrompt {
+            showUploadPrompt = false
+            playing = true
+            schedule()
+            return
+        }
+        go(to: index - 1)
+    }
 
     private func go(to i: Int) {
         guard !segments.isEmpty else { return }
         index = (i + segments.count) % segments.count
         playing = true
         showUploadPrompt = false
-        schedule()
-    }
-
-    /// 안내에서 "처음부터 다시 보기"
-    func replay() {
-        showUploadPrompt = false
-        index = 0
-        playing = true
         schedule()
     }
 
@@ -265,8 +270,7 @@ struct TheaterView: View {
     }
 
     // ── 카드별 액션 알약 ──────────────────────────────────
-    /// 내 카드: 내 영상이 없거나 다 봤을 때 "눌러서 촬영"
-    /// 파트너 카드: 다 봤을 때 "처음부터 다시 보기"
+    /// 내 카드: 내 영상이 없는 자리(워터마크 아래)나 다 본 뒤 빈 슬레이트에 "눌러서 촬영"
     @ViewBuilder
     private func cardActions(userId: UUID?, height: CGFloat) -> some View {
         let isMe = userId != nil && userId == app.myId
@@ -280,10 +284,7 @@ struct TheaterView: View {
         ZStack {
             if isMe, model.showUploadPrompt || myClipMissing {
                 pill("눌러서 촬영") { onCapture() }
-                    .offset(y: 18)
-            } else if !isMe, model.showUploadPrompt {
-                pill("처음부터 다시 보기") { model.replay() }
-                    .offset(y: 18)
+                    .offset(y: model.showUploadPrompt ? 0 : 18)
             }
         }
         .frame(maxWidth: .infinity)
@@ -316,26 +317,45 @@ struct TheaterView: View {
         ZStack {
             Color(hex: "#17171f")
 
-            if let clip = side.clip, clip.clip.videoKey != nil {
+            if model.showUploadPrompt {
+                // 다 본 뒤의 빈 슬레이트 — 아무것도 그리지 않음 (내 카드엔 알약만)
+                EmptyView()
+            } else if let clip = side.clip, clip.clip.videoKey != nil {
                 PlayerLayerView(player: player)
                     .opacity(side.active ? 1 : 0.45)
 
-                // 캡션 — 영상 정중앙
-                Text(clip.caption)
-                    .font(.system(size: 15, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.85), radius: 7)
-                    .padding(.horizontal, 16)
-                    .opacity(side.active ? 1 : 0.5)
+                // 시간 + 캡션 — 영상 정중앙
+                VStack(spacing: 5) {
+                    if let timeLabel {
+                        Text(timeLabel)
+                            .font(.system(size: 11.5, weight: .bold))
+                            .kerning(0.8)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    Text(clip.caption)
+                        .font(.system(size: 15, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: .black.opacity(0.85), radius: 7)
+                .padding(.horizontal, 16)
+                .opacity(side.active ? 1 : 0.5)
             } else if let clip = side.clip {
-                Text(clip.caption)
-                    .font(.system(size: 13, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .foregroundStyle(side.active ? Theme.text : Theme.faint)
-                    .padding(14)
+                VStack(spacing: 5) {
+                    if let timeLabel {
+                        Text(timeLabel)
+                            .font(.system(size: 11, weight: .bold))
+                            .kerning(0.8)
+                            .foregroundStyle(Theme.faint)
+                    }
+                    Text(clip.caption)
+                        .font(.system(size: 13, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .foregroundStyle(side.active ? Theme.text : Theme.faint)
+                }
+                .padding(14)
             } else if let timeLabel {
                 // 빈 자리: 시간 워터마크 (레퍼런스의 14:00 느낌)
                 Text(timeLabel)
@@ -343,11 +363,6 @@ struct TheaterView: View {
                     .kerning(2)
                     .foregroundStyle(.white.opacity(0.1))
                     .offset(y: -16)
-            }
-
-            // 다 봤을 때는 카드 전체를 살짝 딤
-            if model.showUploadPrompt {
-                Color.black.opacity(0.45).allowsHitTesting(false)
             }
 
             // 헤더 (좌상단 아바타+이름) · kcal (우상단)
@@ -369,7 +384,7 @@ struct TheaterView: View {
                         }
                     }
                     Spacer()
-                    if side.active, let tag = side.clip?.tag {
+                    if !model.showUploadPrompt, side.active, let tag = side.clip?.tag {
                         Text("\(tag.isMove ? "−" : "+")\(tag.kcal)")
                             .font(.system(size: 10.5, weight: .bold))
                             .foregroundStyle(tag.isMove ? Theme.green : .white)
