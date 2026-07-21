@@ -5,11 +5,13 @@ import Foundation
 
 /// 인바디 검사지 스캔 → OCR → 확인/수정 → 저장
 /// firstTime = 온보딩(신체 정보 최초 입력, 성별·나이·키 포함)
+/// startManual = 스캔 없이 바로 직접 입력 단계로 시작 (체중·골격근량·체지방률 수동 기록)
 struct ScanFlowView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
 
     let firstTime: Bool
+    var startManual: Bool = false
 
     enum Step { case scan, analyzing, confirm }
     @State private var step: Step = .scan
@@ -50,6 +52,14 @@ struct ScanFlowView: View {
         }
         .onChange(of: pickedItem) {
             Task { await analyze() }
+        }
+        .onAppear {
+            if startManual, step == .scan {
+                weight = app.myProfile?.weight
+                smm = app.myProfile?.skeletalMuscle
+                bodyFat = app.myProfile?.bodyFat
+                step = .confirm
+            }
         }
     }
 
@@ -126,7 +136,9 @@ struct ScanFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(scanImage == nil ? "신체 수치 입력" : "인식 결과 확인")
                 .font(.system(size: 17, weight: .bold))
-            Text("숫자가 다르면 바로 수정할 수 있어요.")
+            Text(scanImage == nil
+                 ? "오늘 잰 체중·골격근량·체지방률을 기록해요. 아는 값만 넣어도 돼요."
+                 : "숫자가 다르면 바로 수정할 수 있어요.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.muted)
 

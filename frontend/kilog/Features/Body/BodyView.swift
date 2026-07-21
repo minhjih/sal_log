@@ -6,6 +6,7 @@ import Foundation
 struct BodyView: View {
     @EnvironmentObject private var app: AppState
     let onScan: () -> Void
+    let onManualEntry: () -> Void
 
     var body: some View {
         ScrollView {
@@ -23,7 +24,8 @@ struct BodyView: View {
                 sharedBanner
 
                 ForEach(app.members) { member in
-                    MemberBodyPanel(member: member, onScan: onScan)
+                    MemberBodyPanel(member: member, onScan: onScan,
+                                    onManualEntry: onManualEntry)
                 }
 
                 Text("민감한 신체 데이터는 그룹 연결 및 항목별 공유 동의가 완료된 멤버끼리만 서버(RLS)에서 내려줘요. 공유 설정은 그룹 관리에서 바꿀 수 있어요.")
@@ -59,6 +61,7 @@ struct MemberBodyPanel: View {
     @EnvironmentObject private var app: AppState
     let member: MemberOverview
     let onScan: () -> Void
+    let onManualEntry: () -> Void
 
     private var isMe: Bool { member.userId == app.myId }
     private var profile: BodyProfile? { isMe ? app.myProfile : member.profile }
@@ -132,18 +135,34 @@ struct MemberBodyPanel: View {
             }
 
             if isMe {
-                Button {
-                    onScan()
-                } label: {
-                    Text("⌞ ⌝  내 새 인바디 검사지 스캔")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(Theme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(13)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14)
-                                .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
-                        )
+                HStack(spacing: 8) {
+                    Button {
+                        onScan()
+                    } label: {
+                        Text("⌞ ⌝  인바디 스캔")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(13)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
+                            )
+                    }
+
+                    Button {
+                        onManualEntry()
+                    } label: {
+                        Text("✎  직접 입력")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(13)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Theme.line, style: .init(lineWidth: 1, dash: [5]))
+                            )
+                    }
                 }
             }
         }
