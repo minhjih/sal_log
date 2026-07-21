@@ -3,18 +3,22 @@ import UIKit
 import Combine
 import Foundation
 
-/// 전면 카메라 홀드-투-레코드 클립 녹화(최대 5초) — AVCaptureSession + MovieFileOutput
+/// 홀드-투-레코드 클립 녹화(최대 5초) — AVCaptureSession + MovieFileOutput
+/// 전면/후면 전환 가능, 마지막 선택을 기억한다.
 @MainActor
 final class CameraModel: NSObject, ObservableObject {
     @Published var isAuthorized = true
     @Published var isRecording = false
     @Published var elapsed: Double = 0
     @Published var recordedURL: URL?
+    @Published private(set) var position: AVCaptureDevice.Position =
+        UserDefaults.standard.string(forKey: "kilog.cameraPosition") == "back" ? .back : .front
 
     let session = AVCaptureSession()
     private let output = AVCaptureMovieFileOutput()
     private var timer: Timer?
     private let sessionQueue = DispatchQueue(label: "kilog.camera")
+    private var videoInput: AVCaptureDeviceInput?
     /// 기기 기울기에 맞는 영상 회전각 제공 — 가로로 찍으면 가로 영상으로 저장됨
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
 
@@ -40,13 +44,14 @@ final class CameraModel: NSObject, ObservableObject {
             isAuthorized = false; return
         }
 
+        let position = self.position
         sessionQueue.async { [self] in
             session.beginConfiguration()
             session.sessionPreset = .high
 
             guard
                 let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                                     for: .video, position: .front),
+                                                     for: .video, position: position),
                 let videoInput = try? AVCaptureDeviceInput(device: camera),
                 session.canAddInput(videoInput)
             else {
@@ -56,6 +61,7 @@ final class CameraModel: NSObject, ObservableObject {
             }
             session.addInput(videoInput)
             Task { @MainActor in
+                self.videoInput = videoInput
                 self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(
                     device: camera, previewLayer: nil
                 )
@@ -85,6 +91,45 @@ final class CameraModel: NSObject, ObservableObject {
         timer?.invalidate()
         sessionQueue.async { [self] in
             if session.isRunning { session.stopRunning() }
+        }
+    }
+
+    /// 전면 ↔ 후면 전환 (녹화 중에는 무시)
+    func flipCamera() {
+        guard !isRecording else { return }
+        let newPosition: AVCaptureDevice.Position = position == .front ? .back : .front
+        let oldInput = videoInput
+
+        sessionQueue.async { [self] in
+            guard
+                let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
+                                                     for: .video, position: newPosition),
+                let newInput = try? AVCaptureDeviceInput(device: camera)
+            else { return }
+
+            session.beginConfiguration()
+            if let oldInput { session.removeInput(oldInput) }
+            if session.canAddInput(newInput) {
+                session.addInput(newInput)
+            } else if let oldInput, session.canAddInput(oldInput) {
+                // 새 카메라를 붙일 수 없으면 원래대로 복구
+                session.addInput(oldInput)
+                session.commitConfiguration()
+                return
+            }
+            session.commitConfiguration()
+
+            Task { @MainActor in
+                self.videoInput = newInput
+                self.position = newPosition
+                self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                    device: camera, previewLayer: nil
+                )
+                UserDefaults.standard.set(
+                    newPosition == .back ? "back" : "front",
+                    forKey: "kilog.cameraPosition"
+                )
+            }
         }
     }
 

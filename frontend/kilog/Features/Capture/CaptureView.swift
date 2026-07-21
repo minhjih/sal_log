@@ -169,6 +169,25 @@ struct CaptureView: View {
                     Spacer()
                 }
                 .padding(.leading, 6)
+
+                // 전면 ↔ 후면 전환 (녹화 중에는 숨김)
+                if camera.isAuthorized && !camera.isRecording {
+                    HStack {
+                        Spacer()
+                        Button {
+                            camera.flipCamera()
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .rotationEffect(.degrees(90))
+                                .frame(width: 44, height: 44)
+                                .background(.black.opacity(0.45))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.trailing, 14)
+                }
             }
 
             // 하단 바 (가로로 들었을 때 읽히도록 라벨도 눕힘)
