@@ -390,13 +390,13 @@ struct PartComparisonCard: View {
                 VStack(spacing: 3) {
                     MuscleFigure(side: .front, color: color,
                                  intensity: intensity, cardio: hasCardio)
-                        .frame(width: 62, height: 128)
+                        .frame(width: 62, height: 136)
                     Text("앞").font(.system(size: 9)).foregroundStyle(Theme.faint)
                 }
                 VStack(spacing: 3) {
                     MuscleFigure(side: .back, color: color,
                                  intensity: intensity, cardio: hasCardio)
-                        .frame(width: 62, height: 128)
+                        .frame(width: 62, height: 136)
                     Text("뒤").font(.system(size: 9)).foregroundStyle(Theme.faint)
                 }
             }
@@ -430,112 +430,5 @@ struct PartComparisonCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-/// 사람 실루엣 (앞/뒤) — 근육 그룹별 강도(0~1)만큼 진하게.
-/// 유산소는 실루엣 뒤 글로우.
-struct MuscleFigure: View {
-    enum Side { case front, back }
-
-    let side: Side
-    let color: Color
-    let intensity: (String) -> Double
-    let cardio: Bool
-
-    private func fill(_ muscle: String) -> Color {
-        color.opacity(0.12 + 0.82 * min(1, max(0, intensity(muscle))))
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-
-            ZStack {
-                if cardio {
-                    RadialGradient(
-                        colors: [color.opacity(0.3), .clear],
-                        center: .center, startRadius: 0, endRadius: w
-                    )
-                }
-
-                // 머리 (중립)
-                Circle()
-                    .fill(color.opacity(0.28))
-                    .frame(width: w * 0.22, height: w * 0.22)
-                    .position(x: w * 0.5, y: h * 0.065)
-
-                // 어깨 (양쪽 캡)
-                Circle().fill(fill("어깨"))
-                    .frame(width: w * 0.17, height: w * 0.17)
-                    .position(x: w * 0.28, y: h * 0.165)
-                Circle().fill(fill("어깨"))
-                    .frame(width: w * 0.17, height: w * 0.17)
-                    .position(x: w * 0.72, y: h * 0.165)
-
-                if side == .front {
-                    // 가슴
-                    RoundedRectangle(cornerRadius: w * 0.07)
-                        .fill(fill("가슴"))
-                        .frame(width: w * 0.36, height: h * 0.13)
-                        .position(x: w * 0.5, y: h * 0.225)
-                    // 복근
-                    RoundedRectangle(cornerRadius: w * 0.07)
-                        .fill(fill("복근"))
-                        .frame(width: w * 0.3, height: h * 0.16)
-                        .position(x: w * 0.5, y: h * 0.38)
-                } else {
-                    // 등 (상부+중부)
-                    RoundedRectangle(cornerRadius: w * 0.08)
-                        .fill(fill("등"))
-                        .frame(width: w * 0.38, height: h * 0.3)
-                        .position(x: w * 0.5, y: h * 0.31)
-                }
-
-                // 팔 (양쪽)
-                Capsule().fill(fill("팔"))
-                    .frame(width: w * 0.11, height: h * 0.3)
-                    .rotationEffect(.degrees(12))
-                    .position(x: w * 0.15, y: h * 0.34)
-                Capsule().fill(fill("팔"))
-                    .frame(width: w * 0.11, height: h * 0.3)
-                    .rotationEffect(.degrees(-12))
-                    .position(x: w * 0.85, y: h * 0.34)
-
-                if side == .back {
-                    // 둔근
-                    Circle().fill(fill("둔근"))
-                        .frame(width: w * 0.19, height: w * 0.19)
-                        .position(x: w * 0.41, y: h * 0.51)
-                    Circle().fill(fill("둔근"))
-                        .frame(width: w * 0.19, height: w * 0.19)
-                        .position(x: w * 0.59, y: h * 0.51)
-                    // 햄스트링
-                    Capsule().fill(fill("햄스트링"))
-                        .frame(width: w * 0.15, height: h * 0.2)
-                        .position(x: w * 0.4, y: h * 0.67)
-                    Capsule().fill(fill("햄스트링"))
-                        .frame(width: w * 0.15, height: h * 0.2)
-                        .position(x: w * 0.6, y: h * 0.67)
-                } else {
-                    // 대퇴 (앞)
-                    Capsule().fill(fill("대퇴"))
-                        .frame(width: w * 0.16, height: h * 0.24)
-                        .position(x: w * 0.4, y: h * 0.6)
-                    Capsule().fill(fill("대퇴"))
-                        .frame(width: w * 0.16, height: h * 0.24)
-                        .position(x: w * 0.6, y: h * 0.6)
-                }
-
-                // 종아리 (양면)
-                Capsule().fill(fill("종아리"))
-                    .frame(width: w * 0.12, height: h * 0.18)
-                    .position(x: w * 0.4, y: h * 0.87)
-                Capsule().fill(fill("종아리"))
-                    .frame(width: w * 0.12, height: h * 0.18)
-                    .position(x: w * 0.6, y: h * 0.87)
-            }
-        }
     }
 }
