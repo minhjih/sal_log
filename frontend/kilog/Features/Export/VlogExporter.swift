@@ -307,7 +307,7 @@ final class VlogExporter {
 
         // 비디오: 리더 → 라이터
         let vQueue = DispatchQueue(label: "kilog.finalize.v")
-        async let videoDone: Void = withCheckedContinuation { cont in
+        async let videoDone: Void = withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             var resumed = false
             vIn.requestMediaDataWhenReady(on: vQueue) {
                 while vIn.isReadyForMoreMediaData {
@@ -358,7 +358,7 @@ final class VlogExporter {
         let totalFrames = Int(duration * sampleRate)
         var written = 0
 
-        await withCheckedContinuation { cont in
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             var resumed = false
             func finish() {
                 if !resumed { resumed = true; input.markAsFinished(); cont.resume() }
