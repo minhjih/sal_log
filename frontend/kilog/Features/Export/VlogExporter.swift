@@ -212,11 +212,13 @@ final class VlogExporter {
             postProcessingAsVideoLayer: videoLayer, in: parentLayer
         )
 
-        // 5) 내보내기 — renderSize(1080×1920)를 그대로 살리기 위해 HighestQuality
+        // 5) 내보내기 — 해상도(1080×1920, renderSize)는 유지하되 비트레이트는
+        //    표준 1080p 수준으로. HighestQuality는 비트레이트가 과해 파일이 너무 컸음.
+        //    (videoComposition.renderSize가 실제 출력 크기를 결정하므로 세로 비율 유지)
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("kilog-\(UUID().uuidString).mp4")
         guard let session = AVAssetExportSession(
-            asset: composition, presetName: AVAssetExportPresetHighestQuality
+            asset: composition, presetName: AVAssetExportPreset1920x1080
         ) else { throw ExportError.exportFailed }
         session.outputURL = outURL
         session.outputFileType = .mp4
