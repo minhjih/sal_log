@@ -130,6 +130,24 @@ final class VlogExporter {
                 )
                 try track.insertTimeRange(sourceRange, of: videoTrack, at: at)
 
+                // 클립이 세그먼트보다 짧으면(특히 반대편 클립이 더 길 때) 남는 구간을
+                // 마지막 프레임으로 홀드한다. 안 그러면 그 칸이 빈 채로 사라져 보인다.
+                if assetDuration < segDur - 0.05 {
+                    let frameDur = 1.0 / 30.0
+                    let lastFrameStart = max(0, useDur - frameDur)
+                    let lastFrame = CMTimeRange(
+                        start: CMTime(seconds: lastFrameStart, preferredTimescale: 600),
+                        duration: CMTime(seconds: frameDur, preferredTimescale: 600)
+                    )
+                    let holdAt = CMTime(seconds: segStart + useDur, preferredTimescale: 600)
+                    try track.insertTimeRange(lastFrame, of: videoTrack, at: holdAt)
+                    // 1프레임을 남은 시간만큼 늘려 정지 화면(프리즈 프레임)으로
+                    track.scaleTimeRange(
+                        CMTimeRange(start: holdAt, duration: lastFrame.duration),
+                        toDuration: CMTime(seconds: segDur - useDur, preferredTimescale: 600)
+                    )
+                }
+
                 let stripRect = CGRect(x: 0, y: rowInfo.y,
                                        width: size.width, height: stripHeight)
                 let natural = try await videoTrack.load(.naturalSize)
