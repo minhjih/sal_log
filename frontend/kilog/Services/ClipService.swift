@@ -73,6 +73,21 @@ enum ClipService {
         return DayFeed(clips: tagged, foods: foods, workouts: workouts)
     }
 
+    // ── 지난 컷 (오늘 이전 최근 N일 — 7일 뒤 자동 삭제 전까지 다시 보기) ──
+    static func fetchPastClips(groupId: UUID, days: Int = 7) async throws -> [TaggedClip] {
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: todayStart)!
+
+        let clips: [Clip] = try await Supa.client.from("clips")
+            .select()
+            .eq("group_id", value: groupId)
+            .gte("recorded_at", value: start)
+            .lt("recorded_at", value: todayStart)
+            .order("recorded_at", ascending: false)
+            .execute().value
+        return clips.map { TaggedClip(clip: $0, tag: nil) }
+    }
+
     // ── 최근 N일 로그 (지표 탭: 부위 비교·스트레이크) ──────
     struct RecentLogs {
         var foods: [FoodLog]

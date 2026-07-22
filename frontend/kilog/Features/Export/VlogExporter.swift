@@ -6,9 +6,10 @@ import SwiftUI
 /// 하루의 클립들을 인스타 스토리용 세로(9:16) 브이로그 한 편으로 합성.
 ///
 ///  · 캔버스: 1080×1920 (스토리 규격)
-///  · 콘텐츠: 앱 오늘 탭에 보이는 그대로의 4:5(1080×1350) 두 줄 분할을
-///    세로 중앙에 배치 — 늘리거나 자르지 않고 위아래는 검은색 레터박스
-///  · 인트로(1.4s) → 세그먼트 → 아웃트로(2.2s)
+///  · 콘텐츠: 앱 오늘 탭에 보이는 그대로의 4:5(1080×1350) 두 줄 스택을
+///    세로 중앙에 배치 — 나머지 위아래는 검은색 레터박스
+///  · 두 줄 사이는 오늘 탭 카드처럼 검은 간격으로 분리
+///  · 인트로(1.4s) → 세그먼트 → 아웃트로(4s)
 ///  · 실제 영상은 AVMutableComposition 트랙에 배치하고 transform/crop으로 줄에 맞춤
 ///  · 텍스트/그라데이션/칩 오버레이는 CoreAnimationTool의 CALayer로 렌더
 final class VlogExporter {
@@ -129,6 +130,24 @@ final class VlogExporter {
                 )
                 try track.insertTimeRange(sourceRange, of: videoTrack, at: at)
 
+                // 클립이 세그먼트보다 짧으면(특히 반대편 클립이 더 길 때) 남는 구간을
+                // 마지막 프레임으로 홀드한다. 안 그러면 그 칸이 빈 채로 사라져 보인다.
+                if assetDuration < segDur - 0.05 {
+                    let frameDur = 1.0 / 30.0
+                    let lastFrameStart = max(0, useDur - frameDur)
+                    let lastFrame = CMTimeRange(
+                        start: CMTime(seconds: lastFrameStart, preferredTimescale: 600),
+                        duration: CMTime(seconds: frameDur, preferredTimescale: 600)
+                    )
+                    let holdAt = CMTime(seconds: segStart + useDur, preferredTimescale: 600)
+                    try track.insertTimeRange(lastFrame, of: videoTrack, at: holdAt)
+                    // 1프레임을 남은 시간만큼 늘려 정지 화면(프리즈 프레임)으로
+                    track.scaleTimeRange(
+                        CMTimeRange(start: holdAt, duration: lastFrame.duration),
+                        toDuration: CMTime(seconds: segDur - useDur, preferredTimescale: 600)
+                    )
+                }
+
                 let stripRect = CGRect(x: 0, y: rowInfo.y,
                                        width: size.width, height: stripHeight)
                 let natural = try await videoTrack.load(.naturalSize)
@@ -141,6 +160,15 @@ final class VlogExporter {
                     range: CMTimeRange(start: at,
                                        duration: CMTime(seconds: segDur, preferredTimescale: 600))
                 ))
+            }
+        }
+
+        // 클립이 하나도 배치되지 않은 줄 트랙은 제거
+        // (한 명만 올린 날 — 빈 비디오 트랙이 남아 있으면 내보내기가 실패한다)
+        for (i, track) in Array(rowTracks) {
+            if !placements.contains(where: { $0.track === track }) {
+                composition.removeTrack(track)
+                rowTracks[i] = nil
             }
         }
 

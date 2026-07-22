@@ -50,7 +50,7 @@ struct MuscleFigure: View {
             // 2) 근육 셰이프 — 불투명 보간 색으로 채워
             //    셰이프가 겹쳐도 이음선(이중 칠)이 생기지 않는다
             var mr: CGFloat = 0, mg: CGFloat = 0, mb: CGFloat = 0, ma: CGFloat = 0
-            UIColor(color).getRed(&mr, &mg, &mb, alpha: &ma)
+            UIColor(color).getRed(&mr, green: &mg, blue: &mb, alpha: &ma)
             func fillColor(_ level: Double) -> Color {
                 let t = level <= 0.01 ? 0 : CGFloat(0.2 + 0.8 * level)
                 let base: CGFloat = 0.34

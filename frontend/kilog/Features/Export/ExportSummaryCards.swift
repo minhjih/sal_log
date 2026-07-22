@@ -17,12 +17,12 @@ struct ExportMuscleCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             Text("오늘의 근육 부하")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.muted)
 
-            HStack(alignment: .top, spacing: 30) {
+            HStack(alignment: .top, spacing: 40) {
                 ForEach(members.prefix(2)) { member in
                     let loads = MuscleMap.loads(
                         from: workouts.filter { $0.userId == member.userId })
@@ -31,19 +31,19 @@ struct ExportMuscleCard: View {
                     }
                     let color = Color(hex: member.colorHex)
 
-                    VStack(spacing: 6) {
-                        HStack(spacing: 6) {
+                    VStack(spacing: 7) {
+                        HStack(spacing: 8) {
                             MuscleFigure(side: .front, color: color,
                                          intensity: { (loads[$0] ?? 0) / maxKcal },
                                          cardio: cardio)
-                                .frame(width: 58, height: 128)
+                                .frame(width: 74, height: 163)
                             MuscleFigure(side: .back, color: color,
                                          intensity: { (loads[$0] ?? 0) / maxKcal },
                                          cardio: cardio)
-                                .frame(width: 58, height: 128)
+                                .frame(width: 74, height: 163)
                         }
                         Text(member.displayName)
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(color)
                     }
                 }
@@ -71,9 +71,9 @@ struct ExportWeightCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Text("체중 추이")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Theme.muted)
 
             Chart {
@@ -111,17 +111,17 @@ struct ExportWeightCard: View {
                         .foregroundStyle(Theme.faint)
                 }
             }
-            .frame(height: 110)
+            .frame(height: 135)
 
             // 범례
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 ForEach(series, id: \.member.userId) { member, points in
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Circle()
                             .fill(Color(hex: member.colorHex))
-                            .frame(width: 7, height: 7)
+                            .frame(width: 8, height: 8)
                         Text("\(member.displayName) \(String(format: "%.1f", points.last?.weight ?? 0))kg")
-                            .font(.system(size: 10.5, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Theme.muted)
                     }
                 }

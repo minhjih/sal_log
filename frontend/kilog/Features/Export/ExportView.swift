@@ -22,7 +22,7 @@ struct ExportView: View {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 12) {
-                Text("인스타 스토리 규격(9:16) · 화면 그대로 + 검은 여백")
+                Text("인스타 스토리 규격(9:16) · 오늘 탭 그대로 + 검은 여백")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
 
@@ -165,11 +165,11 @@ struct ExportView: View {
             let members = [myMember] + (app.partner.map { [$0] } ?? [])
             let muscleImage = app.feed.workouts.isEmpty ? nil : renderCard(
                 ExportMuscleCard(members: members, workouts: app.feed.workouts)
-                    .frame(width: 440, height: 200)
+                    .frame(width: 440, height: 240)
             )
             let weightImage = members.contains(where: { $0.measurements.count >= 2 })
                 ? renderCard(ExportWeightCard(members: members)
-                    .frame(width: 440, height: 180))
+                    .frame(width: 440, height: 210))
                 : nil
 
             let input = VlogExporter.Input(
