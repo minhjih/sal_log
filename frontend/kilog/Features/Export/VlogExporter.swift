@@ -1,5 +1,7 @@
 import Foundation
 import AVFoundation
+import CoreMedia
+import AudioToolbox
 import UIKit
 import SwiftUI
 
@@ -12,6 +14,8 @@ import SwiftUI
 ///  · 인트로(1.4s) → 세그먼트 → 아웃트로(4s)
 ///  · 실제 영상은 AVMutableComposition 트랙에 배치하고 transform/crop으로 줄에 맞춤
 ///  · 텍스트/그라데이션/칩 오버레이는 CoreAnimationTool의 CALayer로 렌더
+///  · 마지막에 비트레이트를 낮춰 재인코딩 + 무음 오디오 트랙 추가
+///    (파일 크기 축소 & 인스타그램 등 공유 호환성)
 final class VlogExporter {
 
     /// 스토리 캔버스 (9:16)
@@ -226,16 +230,168 @@ final class VlogExporter {
 
         let progressTask = Task {
             while !Task.isCancelled {
-                progress(Double(session.progress))
+                progress(Double(session.progress) * 0.65)
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }
-        defer { progressTask.cancel() }
 
         await session.export()
+        progressTask.cancel()
         guard session.status == .completed else { throw ExportError.exportFailed }
+
+        // 6) 마무리 패스: 비트레이트를 낮춰 파일 크기 축소 + 무음 오디오 트랙 추가.
+        //    (오디오가 없는 영상은 인스타그램 등에서 "지원 안 함"으로 거부됨)
+        //    실패해도 원본(overlay) 결과를 그대로 쓰도록 best-effort.
+        progress(0.7)
+        if let finalURL = try? await Self.finalize(outURL, duration: totalSec) {
+            try? FileManager.default.removeItem(at: outURL)
+            progress(1)
+            return finalURL
+        }
         progress(1)
         return outURL
+    }
+
+    // ── 마무리 패스: 비트레이트 축소 + 무음 오디오 ──────────
+    /// 오버레이 합성 결과를 다시 인코딩한다.
+    ///  · 비디오: H.264 High, 평균 3.5Mbps (HighestQuality 대비 파일 대폭 축소)
+    ///  · 오디오: 무음 AAC 트랙 추가 (오디오 없는 mp4는 일부 앱이 거부)
+    static func finalize(_ source: URL, duration: Double) async throws -> URL {
+        let asset = AVURLAsset(url: source)
+        guard let vTrack = try await asset.loadTracks(withMediaType: .video).first
+        else { throw ExportError.exportFailed }
+        let natural = try await vTrack.load(.naturalSize)
+
+        let outURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kilog-final-\(UUID().uuidString).mp4")
+
+        let reader = try AVAssetReader(asset: asset)
+        let vOut = AVAssetReaderTrackOutput(
+            track: vTrack,
+            outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String:
+                    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            ]
+        )
+        guard reader.canAdd(vOut) else { throw ExportError.exportFailed }
+        reader.add(vOut)
+
+        let writer = try AVAssetWriter(outputURL: outURL, fileType: .mp4)
+        let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: Int(natural.width),
+            AVVideoHeightKey: Int(natural.height),
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 3_500_000,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                AVVideoMaxKeyFrameIntervalKey: 60,
+            ],
+        ])
+        vIn.expectsMediaDataInRealTime = false
+        guard writer.canAdd(vIn) else { throw ExportError.exportFailed }
+        writer.add(vIn)
+
+        let aIn = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVNumberOfChannelsKey: 1,
+            AVSampleRateKey: 44_100,
+            AVEncoderBitRateKey: 64_000,
+        ])
+        aIn.expectsMediaDataInRealTime = false
+        if writer.canAdd(aIn) { writer.add(aIn) }
+
+        guard reader.startReading(), writer.startWriting() else {
+            throw ExportError.exportFailed
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        // 비디오: 리더 → 라이터
+        let vQueue = DispatchQueue(label: "kilog.finalize.v")
+        async let videoDone: Void = withCheckedContinuation { cont in
+            var resumed = false
+            vIn.requestMediaDataWhenReady(on: vQueue) {
+                while vIn.isReadyForMoreMediaData {
+                    if let sb = vOut.copyNextSampleBuffer() {
+                        vIn.append(sb)
+                    } else {
+                        if !resumed { resumed = true; vIn.markAsFinished(); cont.resume() }
+                        return
+                    }
+                }
+            }
+        }
+
+        // 오디오: 무음 LPCM 샘플을 만들어 AAC로 인코딩
+        let aQueue = DispatchQueue(label: "kilog.finalize.a")
+        async let audioDone: Void = Self.appendSilentAudio(
+            to: aIn, duration: duration, queue: aQueue
+        )
+
+        _ = await (videoDone, audioDone)
+        await writer.finishWriting()
+        guard writer.status == .completed else { throw ExportError.exportFailed }
+        return outURL
+    }
+
+    /// 무음 오디오(16-bit LPCM)를 만들어 AAC 라이터 입력에 채운다.
+    private static func appendSilentAudio(
+        to input: AVAssetWriterInput, duration: Double, queue: DispatchQueue
+    ) async {
+        let sampleRate: Double = 44_100
+        var asbd = AudioStreamBasicDescription(
+            mSampleRate: sampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 2, mFramesPerPacket: 1, mBytesPerFrame: 2,
+            mChannelsPerFrame: 1, mBitsPerChannel: 16, mReserved: 0
+        )
+        var format: CMFormatDescription?
+        guard CMAudioFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: 0, layout: nil,
+            magicCookieSize: 0, magicCookie: nil, extensions: nil,
+            formatDescriptionOut: &format
+        ) == noErr, let format else {
+            input.markAsFinished(); return
+        }
+
+        let chunk = 4096
+        let totalFrames = Int(duration * sampleRate)
+        var written = 0
+
+        await withCheckedContinuation { cont in
+            var resumed = false
+            func finish() {
+                if !resumed { resumed = true; input.markAsFinished(); cont.resume() }
+            }
+            input.requestMediaDataWhenReady(on: queue) {
+                while input.isReadyForMoreMediaData {
+                    if written >= totalFrames { finish(); return }
+                    let n = min(chunk, totalFrames - written)
+                    let bytes = n * 2
+                    var block: CMBlockBuffer?
+                    guard CMBlockBufferCreateWithMemoryBlock(
+                        allocator: kCFAllocatorDefault, memoryBlock: nil,
+                        blockLength: bytes, blockAllocator: kCFAllocatorDefault,
+                        customBlockSource: nil, offsetToData: 0, dataLength: bytes,
+                        flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block
+                    ) == noErr, let block else { finish(); return }
+                    CMBlockBufferFillDataBytes(
+                        with: 0, blockBuffer: block, offsetIntoDestination: 0, dataLength: bytes
+                    )
+                    var sb: CMSampleBuffer?
+                    let pts = CMTime(value: CMTimeValue(written),
+                                     timescale: CMTimeScale(sampleRate))
+                    guard CMAudioSampleBufferCreateReadyWithPacketDescriptions(
+                        allocator: kCFAllocatorDefault, dataBuffer: block,
+                        formatDescription: format, sampleCount: CMItemCount(n),
+                        presentationTimeStamp: pts, packetDescriptions: nil,
+                        sampleBufferOut: &sb
+                    ) == noErr, let sb else { finish(); return }
+                    input.append(sb)
+                    written += n
+                }
+            }
+        }
     }
 
     // ── aspect-fill 변환 계산 ─────────────────────────────
