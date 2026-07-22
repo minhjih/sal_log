@@ -169,7 +169,7 @@ struct ExportView: View {
             )
             let weightImage = members.contains(where: { $0.measurements.count >= 2 })
                 ? renderCard(ExportWeightCard(members: members)
-                    .frame(width: 440, height: 210))
+                    .frame(width: 440, height: 150))
                 : nil
 
             let input = VlogExporter.Input(
