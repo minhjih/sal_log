@@ -4,6 +4,7 @@ import Supabase
 import Combine
 import Auth
 import Realtime
+import AVFoundation
 
 /// 앱 전역 상태: 세션 → 그룹 → 오늘 피드
 @MainActor
@@ -114,6 +115,9 @@ final class AppState: ObservableObject {
                     remindersScheduled = true
                     Task { await NotificationService.scheduleMealReminders() }
                 }
+
+                // 지난 날의 개별 클립을 합성본으로 아카이브 (백그라운드)
+                Task { await archivePastDays() }
             }
         } catch {
             if AuthService.currentUserId == nil {
@@ -191,5 +195,81 @@ final class AppState: ObservableObject {
             workouts: feed.workouts,
             profile: userId == myId ? myProfile : member(for: userId)?.profile
         )
+    }
+
+    // ── 지난 날 합성본 아카이브 ────────────────────────────
+    /// 오늘 이전 최근 7일 중, 클립이 있는데 합성본이 없는 가장 오래된 하루를
+    /// 한 번에 하나씩 합성 → 업로드 → 개별 클립 삭제. 부하를 위해 호출당 1일만.
+    private var archiving = false
+    func archivePastDays() async {
+        guard !archiving, let group, let myId = me?.id, let mine = myMember else { return }
+        archiving = true
+        defer { archiving = false }
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let reeled = Set(((try? await ReelService.fetchReels(groupId: group.id)) ?? [])
+            .map(\.reelDate))
+
+        for offset in stride(from: 7, through: 1, by: -1) {
+            guard let day = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let key = ReelService.dateKey(day)
+            if reeled.contains(key) { continue }
+            guard let feed = try? await ClipService.fetchDay(groupId: group.id, date: day)
+            else { continue }
+            guard feed.clips.contains(where: { $0.clip.videoKey != nil }) else { continue }
+            guard await ReelService.claim(groupId: group.id, reelDate: key, userId: myId)
+            else { continue }
+
+            do {
+                let local = try await buildReelVideo(day: day, feed: feed, me: mine)
+                let videoKey = try await ReelService.uploadReel(
+                    groupId: group.id, reelDate: key, fileURL: local)
+                try await ReelService.finalize(
+                    groupId: group.id, reelDate: key, videoKey: videoKey)
+                let start = cal.startOfDay(for: day)
+                let end = cal.date(byAdding: .day, value: 1, to: start)!
+                try await ReelService.archiveClips(
+                    groupId: group.id, reelDate: key, start: start, end: end)
+            } catch {
+                await ReelService.releaseClaim(groupId: group.id, reelDate: key)
+            }
+            break   // 호출당 하루만
+        }
+    }
+
+    private func buildReelVideo(
+        day: Date, feed: ClipService.DayFeed, me: MemberOverview
+    ) async throws -> URL {
+        var localFiles: [UUID: URL] = [:]
+        var durations: [UUID: Double] = [:]
+        for clip in feed.clips where clip.clip.videoKey != nil {
+            guard let url = try? await ClipService.cachedVideoURL(for: clip.clip) else { continue }
+            localFiles[clip.id] = url
+            if let sec = try? await AVURLAsset(url: url).load(.duration).seconds,
+               sec.isFinite, sec > 0 { durations[clip.id] = sec }
+        }
+
+        func dayStats(_ uid: UUID) -> HealthMath.DailyStats {
+            HealthMath.dailyStats(
+                userId: uid, foods: feed.foods, workouts: feed.workouts,
+                profile: uid == myId ? myProfile : member(for: uid)?.profile)
+        }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ko_KR")
+        df.dateFormat = "M.d E"
+
+        let input = VlogExporter.Input(
+            segments: Timeline.buildSegments(feed.clips),
+            localFiles: localFiles,
+            durations: durations,
+            topRow: .init(member: me, stats: dayStats(me.userId)),
+            bottomRow: partner.map { .init(member: $0, stats: dayStats($0.userId)) },
+            dateLabel: df.string(from: day),
+            muscleImage: nil,
+            weightImage: nil
+        )
+        return try await VlogExporter().export(input) { _ in }
     }
 }

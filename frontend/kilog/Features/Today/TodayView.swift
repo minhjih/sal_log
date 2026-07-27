@@ -11,6 +11,8 @@ struct TodayView: View {
     @State private var clipToDelete: TaggedClip?
     @State private var pastClips: [TaggedClip] = []
     @State private var playingClip: TaggedClip?
+    @State private var reels: [ReelService.DayReel] = []
+    @State private var playingReel: ReelService.DayReel?
 
     var body: some View {
         ScrollView {
@@ -22,6 +24,8 @@ struct TodayView: View {
                 StreakCard(logs: app.recentLogs)
 
                 todaysCuts
+
+                reelsSection
 
                 pastCuts
 
@@ -38,10 +42,21 @@ struct TodayView: View {
         .refreshable {
             await app.reloadFeed()
             await loadPastClips()
+            await loadReels()
         }
-        .task { await loadPastClips() }
+        .task {
+            await loadPastClips()
+            await loadReels()
+            // 지난 날 합성 후 새로 생긴 릴을 반영
+            await app.archivePastDays()
+            await loadReels()
+            await loadPastClips()
+        }
         .fullScreenCover(item: $playingClip) { clip in
             PastClipPlayerView(clip: clip, member: app.member(for: clip.userId))
+        }
+        .fullScreenCover(item: $playingReel) { reel in
+            ReelPlayerView(reel: reel)
         }
         .onAppear { syncTheater() }
         .onChange(of: app.feed.clips) { syncTheater() }
@@ -78,6 +93,68 @@ struct TodayView: View {
         guard let group = app.group else { return }
         if let clips = try? await ClipService.fetchPastClips(groupId: group.id) {
             pastClips = clips
+        }
+    }
+
+    private func loadReels() async {
+        guard let group = app.group else { return }
+        if let list = try? await ReelService.fetchReels(groupId: group.id) {
+            reels = list
+        }
+    }
+
+    // ── 지난 브이로그 (하루 합성본) ────────────────────────
+    @ViewBuilder
+    private var reelsSection: some View {
+        if !reels.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("지난 브이로그").font(.system(size: 13, weight: .bold))
+                    Spacer()
+                    Text("하루가 지나면 한 편으로 합쳐 보관해요")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.faint)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(reels) { reel in
+                            reelCard(reel)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .card(radius: 16)
+        }
+    }
+
+    private func reelCard(_ reel: ReelService.DayReel) -> some View {
+        let label: String = {
+            guard let d = reel.date else { return reel.reelDate }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "ko_KR")
+            f.dateFormat = "M.d E"
+            return f.string(from: d)
+        }()
+        return Button {
+            playingReel = reel
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Theme.duo.opacity(0.18))
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Theme.text)
+                }
+                .frame(width: 108, height: 135)
+                Text(label)
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(Theme.text)
+                Text("ki—log")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Theme.faint)
+            }
         }
     }
 
@@ -313,6 +390,82 @@ struct TodayView: View {
                 if let looper { NotificationCenter.default.removeObserver(looper) }
             }
             .onTapGesture { dismiss() }
+        }
+    }
+
+    // ── 지난 브이로그(합성본) 전체화면 재생 ────────────────
+    struct ReelPlayerView: View {
+        let reel: ReelService.DayReel
+        @Environment(\.dismiss) private var dismiss
+
+        @State private var player: AVPlayer?
+        @State private var loadFailed = false
+        @State private var looper: Any?
+
+        private var label: String {
+            guard let d = reel.date else { return reel.reelDate }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "ko_KR")
+            f.dateFormat = "M월 d일 E"
+            return f.string(from: d)
+        }
+
+        var body: some View {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if let player {
+                    PlayerLayerView(player: player, gravity: .resizeAspect)
+                        .ignoresSafeArea()
+                } else if loadFailed {
+                    Text("영상을 불러오지 못했어요.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.muted)
+                } else {
+                    ProgressView().tint(.white)
+                }
+
+                VStack {
+                    HStack {
+                        Text(label)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(.white.opacity(0.15))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(16)
+                    Spacer()
+                }
+            }
+            .task {
+                do {
+                    guard let url = try await ReelService.cachedReelURL(reel) else {
+                        loadFailed = true; return
+                    }
+                    let p = AVPlayer(url: url)
+                    p.isMuted = false
+                    looper = NotificationCenter.default.addObserver(
+                        forName: .AVPlayerItemDidPlayToEndTime,
+                        object: p.currentItem, queue: .main
+                    ) { _ in p.seek(to: .zero); p.play() }
+                    player = p
+                    p.play()
+                } catch {
+                    loadFailed = true
+                }
+            }
+            .onDisappear {
+                player?.pause()
+                if let looper { NotificationCenter.default.removeObserver(looper) }
+            }
         }
     }
 
