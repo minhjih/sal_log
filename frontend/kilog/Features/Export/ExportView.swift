@@ -98,35 +98,6 @@ struct ExportView: View {
         .onDisappear { player?.pause() }
     }
 
-    /// 클립의 재생 가능한 로컬 파일을 끝까지 확보한다.
-    /// 캐시(앱/디스크) → 없거나 손상 시 강제 재다운로드 순으로 시도하고,
-    /// 각 단계에서 실제로 비디오 트랙이 열리는지 검증한다.
-    private func playableURL(for clip: TaggedClip) async -> URL? {
-        if let cached = app.videoCache[clip.id], await hasVideoTrack(cached) {
-            return cached
-        }
-        if let cached = try? await ClipService.cachedVideoURL(for: clip.clip),
-           await hasVideoTrack(cached) {
-            return cached
-        }
-        // 캐시가 손상됐을 수 있으니 새로 발급받아 재다운로드
-        if let fresh = try? await ClipService.redownloadVideo(for: clip.clip),
-           await hasVideoTrack(fresh) {
-            return fresh
-        }
-        return nil
-    }
-
-    private func hasVideoTrack(_ url: URL) async -> Bool {
-        let asset = AVURLAsset(url: url)
-        guard let tracks = try? await asset.loadTracks(withMediaType: .video),
-              let track = tracks.first else { return false }
-        // 자연 크기가 0이면(손상 파일) 재생 불가로 간주
-        if let size = try? await track.load(.naturalSize), size.width > 0, size.height > 0 {
-            return true
-        }
-        return false
-    }
 
     /// 요약 카드를 CGImage로 렌더 (아웃트로 배경색과 같은 배경을 깔아 불투명 렌더)
     private func renderCard<V: View>(_ view: V) -> CGImage? {
@@ -165,25 +136,43 @@ struct ExportView: View {
         player = nil
 
         do {
-            // 1) 영상 클립 준비 — 재생 가능한 파일만 담되, 캐시가 손상됐으면 재다운로드.
-            //    (짧거나 비율이 달라서가 아니라, 캐시/다운로드가 불완전할 때 빠지던 것)
+            // 1) 영상 클립 준비 — 병렬로 로드하고 각 다운로드는 타임아웃이 있어
+            //    한두 개가 안 불러와져도 전체가 멈추지(무한 로딩) 않는다.
+            //    못 불러온 클립은 조용히 제외하고 나머지로 합성한다.
+            let videoClips = clips.filter { $0.clip.videoKey != nil }
+            let cachedSnapshot: [UUID: URL] = Dictionary(
+                uniqueKeysWithValues: videoClips.compactMap { c in
+                    app.videoCache[c.id].map { (c.id, $0) }
+                })
+
             var localFiles: [UUID: URL] = [:]
-            var durations: [UUID: Double] = [:]
-            var dropped = 0
-            for clip in clips {
-                guard clip.clip.videoKey != nil else { continue }
-                guard let local = await playableURL(for: clip) else {
-                    dropped += 1
-                    continue
+            await withTaskGroup(of: (UUID, URL?).self) { group in
+                for clip in videoClips {
+                    let c = clip.clip
+                    let cached = cachedSnapshot[clip.id]
+                    group.addTask {
+                        (c.id, await ClipService.resolvePlayable(clip: c, cached: cached))
+                    }
                 }
-                localFiles[clip.id] = local
-                if let sec = try? await AVURLAsset(url: local).load(.duration).seconds,
-                   sec.isFinite, sec > 0 {
-                    durations[clip.id] = sec
+                for await (id, url) in group where url != nil {
+                    localFiles[id] = url
                 }
             }
+            let dropped = videoClips.count - localFiles.count
             if dropped > 0 {
                 print("[Export] \(dropped)개 클립을 불러오지 못해 제외됨")
+            }
+            if !videoClips.isEmpty && localFiles.isEmpty {
+                stage = .failed("영상을 불러오지 못했어요.\n네트워크를 확인하고 다시 시도해 주세요.")
+                return
+            }
+
+            var durations: [UUID: Double] = [:]
+            for clip in videoClips {
+                guard let url = localFiles[clip.id],
+                      let sec = try? await AVURLAsset(url: url).load(.duration).seconds,
+                      sec.isFinite, sec > 0 else { continue }
+                durations[clip.id] = sec
             }
 
             // 2) 합성
