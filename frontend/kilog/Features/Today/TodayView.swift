@@ -399,6 +399,7 @@ struct TodayView: View {
         @Environment(\.dismiss) private var dismiss
 
         @State private var player: AVPlayer?
+        @State private var localURL: URL?
         @State private var loadFailed = false
         @State private var looper: Any?
 
@@ -425,11 +426,22 @@ struct TodayView: View {
                 }
 
                 VStack {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text(label)
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                         Spacer()
+                        if let localURL {
+                            ShareLink(item: localURL,
+                                      preview: SharePreview("Kilog · \(label)")) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 34, height: 34)
+                                    .background(.white.opacity(0.15))
+                                    .clipShape(Circle())
+                            }
+                        }
                         Button {
                             dismiss()
                         } label: {
@@ -450,6 +462,7 @@ struct TodayView: View {
                     guard let url = try await ReelService.cachedReelURL(reel) else {
                         loadFailed = true; return
                     }
+                    localURL = url
                     let p = AVPlayer(url: url)
                     p.isMuted = false
                     looper = NotificationCenter.default.addObserver(

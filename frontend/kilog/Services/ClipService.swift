@@ -230,6 +230,29 @@ enum ClipService {
         return local
     }
 
+    /// 서버는 DB 행만 지우므로(호스티드는 SQL로 storage 삭제 불가), 내 소유
+    /// 클립 영상 파일 중 더 이상 clips 행이 없는(고아) 것을 Storage API로 정리.
+    static func cleanupOrphanClipFiles(groupId: UUID, userId: UUID) async {
+        let prefix = "\(groupId.uuidString.lowercased())/\(userId.uuidString.lowercased())"
+        guard let files = try? await Supa.client.storage.from("clips").list(path: prefix)
+        else { return }
+
+        struct KeyRow: Decodable { let video_key: String? }
+        let rows: [KeyRow] = (try? await Supa.client.from("clips")
+            .select("video_key")
+            .eq("user_id", value: userId)
+            .execute().value) ?? []
+        let keep = Set(rows.compactMap(\.video_key))
+
+        let orphans = files.compactMap { f -> String? in
+            let key = "\(prefix)/\(f.name)"
+            return keep.contains(key) ? nil : key
+        }
+        if !orphans.isEmpty {
+            _ = try? await Supa.client.storage.from("clips").remove(paths: orphans)
+        }
+    }
+
     /// 캐시된 파일이 손상/부분 다운로드일 때: 캐시와 signed URL을 버리고 새로 받는다.
     static func redownloadVideo(for clip: Clip) async throws -> URL? {
         guard let key = clip.videoKey else { return nil }
