@@ -241,15 +241,31 @@ final class VlogExporter {
 
         // 6) 마무리 패스: 비트레이트를 낮춰 파일 크기 축소 + 무음 오디오 트랙 추가.
         //    (오디오가 없는 영상은 인스타그램 등에서 "지원 안 함"으로 거부됨)
-        //    실패해도 원본(overlay) 결과를 그대로 쓰도록 best-effort.
+        //    멈춤(hang) 방지를 위해 타임아웃을 두고, 실패/초과 시 원본을 그대로 사용.
         progress(0.7)
-        if let finalURL = try? await Self.finalize(outURL, duration: totalSec) {
+        if let finalURL = await Self.finalizeWithTimeout(outURL, duration: totalSec, seconds: 120) {
             try? FileManager.default.removeItem(at: outURL)
             progress(1)
             return finalURL
         }
         progress(1)
         return outURL
+    }
+
+    /// finalize를 타임아웃과 함께 실행. 초과하거나 실패하면 nil.
+    static func finalizeWithTimeout(
+        _ source: URL, duration: Double, seconds: Double
+    ) async -> URL? {
+        await withTaskGroup(of: URL?.self) { group in
+            group.addTask { try? await finalize(source, duration: duration) }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 
     // ── 마무리 패스: 비트레이트 축소 + 무음 오디오 ──────────

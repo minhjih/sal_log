@@ -47,8 +47,8 @@ struct TodayView: View {
         .task {
             await loadPastClips()
             await loadReels()
-            // 지난 날 합성 후 새로 생긴 릴을 반영
-            await app.archivePastDays()
+            // 지난 날 합성(직렬 파이프라인) 후 새로 생긴 릴 반영
+            await app.runBackgroundPipeline()
             await loadReels()
             await loadPastClips()
         }

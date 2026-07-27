@@ -104,13 +104,6 @@ final class AppState: ObservableObject {
                         self?.launchProgress = 0.4 + 0.6 * fraction
                     }
                     launchProgress = 1
-                    // 캐싱 우선순위: 당일 클립 먼저, 그 다음 릴(vlog)을 자기들끼리 큐로
-                    Task {
-                        await cacheRemainingInBackground()
-                        await cacheReelsInBackground()
-                    }
-                } else {
-                    await reloadFeed()
                 }
                 phase = .ready
                 await subscribeRealtime()
@@ -121,8 +114,10 @@ final class AppState: ObservableObject {
                     Task { await NotificationService.scheduleMealReminders() }
                 }
 
-                // 지난 날의 개별 클립을 합성본으로 아카이브 (백그라운드)
-                Task { await archivePastDays() }
+                // 백그라운드 작업은 한 줄로 직렬화 — 동시에 URLSession을 물지 않게.
+                // (병렬로 돌면 릴 합성/업로드가 다른 다운로드와 경합해 타임아웃남)
+                //   ① 당일 클립 캐시 → ② 지난날 합성(다운로드+업로드) → ③ 릴 캐시
+                Task { await runBackgroundPipeline() }
             }
         } catch {
             if AuthService.currentUserId == nil {
@@ -137,8 +132,8 @@ final class AppState: ObservableObject {
         guard let group else { return }
         do {
             feed = try await ClipService.fetchDay(groupId: group.id, date: date)
-            // 실시간으로 새로 올라온 클립·미완료분은 백그라운드 스택에서 캐시
-            Task { await self.cacheRemainingInBackground() }
+            // 새 클립·미완료분 캐시 등은 직렬 파이프라인으로 (중복/경합 방지)
+            Task { await self.runBackgroundPipeline() }
             // 스트레이크·근육 비교용 최근 로그 갱신 (백그라운드)
             Task { [groupId = group.id] in
                 if let logs = try? await ClipService.fetchRecentLogs(groupId: groupId, days: 30) {
@@ -241,6 +236,19 @@ final class AppState: ObservableObject {
             workouts: feed.workouts,
             profile: userId == myId ? myProfile : member(for: userId)?.profile
         )
+    }
+
+    // ── 백그라운드 파이프라인 (직렬) ───────────────────────
+    /// 네트워크 경합을 막기 위해 한 번에 하나만 실행.
+    /// ① 당일 클립 캐시 → ② 지난날 합성/업로드 → ③ 릴 캐시
+    private var pipelineRunning = false
+    func runBackgroundPipeline() async {
+        guard !pipelineRunning else { return }
+        pipelineRunning = true
+        defer { pipelineRunning = false }
+        await cacheRemainingInBackground()
+        await archivePastDays()
+        await cacheReelsInBackground()
     }
 
     // ── 지난 날 합성본 아카이브 ────────────────────────────
