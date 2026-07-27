@@ -208,8 +208,26 @@ final class AppState: ObservableObject {
 
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        let reeled = Set(((try? await ReelService.fetchReels(groupId: group.id)) ?? [])
-            .map(\.reelDate))
+        let reels = (try? await ReelService.fetchReels(groupId: group.id)) ?? []
+        let reeled = Set(reels.map(\.reelDate))
+        let weekAgo = cal.date(byAdding: .day, value: -7, to: today)!
+
+        // 0) 이미 합성본(ready)이 있는 날인데 개별 클립이 남아 있으면 다시 삭제.
+        //    (지난번 삭제 실패분·아카이브 단계 없던 이전 버전으로 만든 릴 정리)
+        for reel in reels {
+            guard let d = reel.date, d >= weekAgo, d < today else { continue }
+            guard let feed = try? await ClipService.fetchDay(groupId: group.id, date: d),
+                  feed.clips.contains(where: { $0.clip.videoKey != nil }) else { continue }
+            let start = cal.startOfDay(for: d)
+            let end = cal.date(byAdding: .day, value: 1, to: start)!
+            do {
+                try await ReelService.archiveClips(
+                    groupId: group.id, reelDate: reel.reelDate, start: start, end: end)
+                await reloadFeed()
+            } catch {
+                print("[Reel] archiveClips 재시도 실패 (\(reel.reelDate)): \(error)")
+            }
+        }
 
         for offset in stride(from: 7, through: 1, by: -1) {
             guard let day = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
