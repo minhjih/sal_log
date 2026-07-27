@@ -104,7 +104,11 @@ final class AppState: ObservableObject {
                         self?.launchProgress = 0.4 + 0.6 * fraction
                     }
                     launchProgress = 1
-                    Task { await cacheRemainingInBackground() }
+                    // 캐싱 우선순위: 당일 클립 먼저, 그 다음 릴(vlog)을 자기들끼리 큐로
+                    Task {
+                        await cacheRemainingInBackground()
+                        await cacheReelsInBackground()
+                    }
                 } else {
                     await reloadFeed()
                 }
@@ -187,6 +191,19 @@ final class AppState: ObservableObject {
     private func cacheWithRetry(_ clip: Clip) async -> URL? {
         if let url = try? await ClipService.cachedVideoURL(for: clip) { return url }
         return try? await ClipService.redownloadVideo(for: clip)
+    }
+
+    /// 릴(합성본) 전용 캐싱 큐 — 당일 클립 캐싱이 끝난 뒤 자기들끼리 하나씩.
+    /// (당일 클립 캐시보다 항상 후순위)
+    private var cachingReels = false
+    func cacheReelsInBackground() async {
+        guard !cachingReels, let group else { return }
+        cachingReels = true
+        defer { cachingReels = false }
+        let reels = (try? await ReelService.fetchReels(groupId: group.id)) ?? []
+        for reel in reels {
+            _ = try? await ReelService.cachedReelURL(reel)
+        }
     }
 
     private func subscribeRealtime() async {
@@ -287,6 +304,9 @@ final class AppState: ObservableObject {
         // 서버는 DB 행만 지우므로, 남은 스토리지 파일(고아)은 여기서 정리한다.
         await ClipService.cleanupOrphanClipFiles(groupId: group.id, userId: myId)
         await ReelService.cleanupOrphanReelFiles(groupId: group.id)
+
+        // 새로 만들어진 릴을 큐에 태워 미리 캐시 (당일 클립 뒤 후순위)
+        await cacheReelsInBackground()
     }
 
     private func buildReelVideo(
