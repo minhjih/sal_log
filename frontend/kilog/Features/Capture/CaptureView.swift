@@ -19,6 +19,7 @@ struct CaptureView: View {
 
     // 메타
     @State private var videoURL: URL?
+    @State private var importing = false
     @State private var caption = ""
     @State private var recordedAt = Date()
     @State private var tagMode: TagMode = .none
@@ -125,6 +126,19 @@ struct CaptureView: View {
         }
         .onChange(of: pickedItem) {
             Task { await importPicked() }
+        }
+        .overlay {
+            if importing {
+                ZStack {
+                    Color.black.opacity(0.6).ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        ProgressView().tint(.white)
+                        Text("영상 정리하는 중…")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
         }
     }
 
@@ -962,11 +976,37 @@ struct CaptureView: View {
 
     private func importPicked() async {
         guard let item = pickedItem else { return }
+        importing = true
+        defer { importing = false }
         if let movie = try? await item.loadTransferable(type: PickedMovie.self) {
-            videoURL = movie.url
+            // 외부 영상은 큰 해상도·긴 길이일 수 있으니, 업로드 전에
+            // 최대 5초로 자르고 720p·표준 비트레이트로 재인코딩해 용량을 맞춘다.
+            let normalized = (try? await Self.normalizeExternalVideo(movie.url)) ?? movie.url
+            videoURL = normalized
             camera.stop()
             step = .meta
         }
+    }
+
+    /// 외부(사진 라이브러리) 영상 표준화: 앞 5초만, 720p로 재인코딩.
+    private static func normalizeExternalVideo(_ url: URL) async throws -> URL {
+        let asset = AVURLAsset(url: url)
+        let duration = (try? await asset.load(.duration)) ?? .zero
+        let cap = CMTime(seconds: Timeline.maxClipSec, preferredTimescale: 600)
+        let end = CMTimeMinimum(duration, cap)
+        guard end.isValid, end.seconds > 0 else { return url }
+
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("picked-norm-\(UUID().uuidString).mp4")
+        guard let session = AVAssetExportSession(
+            asset: asset, presetName: AVAssetExportPreset1280x720
+        ) else { return url }
+        session.outputURL = out
+        session.outputFileType = .mp4
+        session.timeRange = CMTimeRange(start: .zero, duration: end)
+        await session.export()
+        guard session.status == .completed else { return url }
+        return out
     }
 }
 

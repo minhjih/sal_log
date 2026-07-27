@@ -97,13 +97,18 @@ final class AppState: ObservableObject {
                 needsOnboardingScan = (boot.profile?.weight == nil)
 
                 if phase != .ready {
-                    // 첫 진입: 스플래시를 유지한 채 피드 + 영상까지 프리로드
+                    // 첫 진입: 스플래시에선 앞쪽 몇 개만 받고, 나머지는 백그라운드로 미룸
                     await reloadFeed()
                     launchProgress = 0.4
-                    await preloadVideos { [weak self] fraction in
+                    await preloadVideos(limit: Self.splashPreloadLimit) { [weak self] fraction in
                         self?.launchProgress = 0.4 + 0.6 * fraction
                     }
                     launchProgress = 1
+                    // 캐싱 우선순위: 당일 클립 먼저, 그 다음 릴(vlog)을 자기들끼리 큐로
+                    Task {
+                        await cacheRemainingInBackground()
+                        await cacheReelsInBackground()
+                    }
                 } else {
                     await reloadFeed()
                 }
@@ -132,8 +137,8 @@ final class AppState: ObservableObject {
         guard let group else { return }
         do {
             feed = try await ClipService.fetchDay(groupId: group.id, date: date)
-            // 실시간으로 새로 올라온 클립은 백그라운드에서 캐시
-            Task { await self.preloadVideos(onProgress: nil) }
+            // 실시간으로 새로 올라온 클립·미완료분은 백그라운드 스택에서 캐시
+            Task { await self.cacheRemainingInBackground() }
             // 스트레이크·근육 비교용 최근 로그 갱신 (백그라운드)
             Task { [groupId = group.id] in
                 if let logs = try? await ClipService.fetchRecentLogs(groupId: groupId, days: 30) {
@@ -145,18 +150,59 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// 오늘 피드의 영상들을 로컬 캐시로 다운로드
-    private func preloadVideos(onProgress: ((Double) -> Void)?) async {
-        let pending = feed.clips.filter {
+    /// 스플래시에서 한 번에 받을 최대 개수 — 나머지는 백그라운드로 미룬다
+    private static let splashPreloadLimit = 5
+    private var backgroundCaching = false
+
+    /// 오늘 피드 영상 캐시. limit이 있으면 앞에서 그만큼만(스플래시용).
+    private func preloadVideos(limit: Int? = nil, onProgress: ((Double) -> Void)?) async {
+        var pending = feed.clips.filter {
             $0.clip.videoKey != nil && videoCache[$0.id] == nil
         }
+        if let limit { pending = Array(pending.prefix(limit)) }
         guard !pending.isEmpty else { onProgress?(1); return }
 
         for (index, clip) in pending.enumerated() {
-            if let local = try? await ClipService.cachedVideoURL(for: clip.clip) {
+            if let local = await cacheWithRetry(clip.clip) {
                 videoCache[clip.id] = local
             }
             onProgress?(Double(index + 1) / Double(pending.count))
+        }
+    }
+
+    /// 남은 영상을 백그라운드에서 하나씩 캐시 (중복 실행 방지).
+    /// 실패분은 다음 reloadFeed/진입 때 다시 시도된다.
+    func cacheRemainingInBackground() async {
+        guard !backgroundCaching else { return }
+        backgroundCaching = true
+        defer { backgroundCaching = false }
+
+        let pending = feed.clips.filter {
+            $0.clip.videoKey != nil && videoCache[$0.id] == nil
+        }
+        for clip in pending where videoCache[clip.id] == nil {
+            if let local = await cacheWithRetry(clip.clip) {
+                videoCache[clip.id] = local
+            }
+        }
+    }
+
+    /// 캐시 다운로드 — 실패하면 새 signed URL로 백엔드에서 재시도.
+    private func cacheWithRetry(_ clip: Clip) async -> URL? {
+        if let url = try? await ClipService.cachedVideoURL(for: clip) { return url }
+        return try? await ClipService.redownloadVideo(for: clip)
+    }
+
+    /// 릴(합성본) 전용 캐싱 큐 — 당일 클립 캐싱이 끝난 뒤 자기들끼리 하나씩.
+    /// (당일 클립 캐시보다 항상 후순위)
+    private var cachingReels = false
+    func cacheReelsInBackground() async {
+        guard !cachingReels, let group else { return }
+        cachingReels = true
+        defer { cachingReels = false }
+        let reels = (try? await ReelService.fetchReels(groupId: group.id)) ?? []
+        for reel in reels {
+            _ = try? await ReelService.cachedReelURL(reel)
         }
     }
 
@@ -258,6 +304,9 @@ final class AppState: ObservableObject {
         // 서버는 DB 행만 지우므로, 남은 스토리지 파일(고아)은 여기서 정리한다.
         await ClipService.cleanupOrphanClipFiles(groupId: group.id, userId: myId)
         await ReelService.cleanupOrphanReelFiles(groupId: group.id)
+
+        // 새로 만들어진 릴을 큐에 태워 미리 캐시 (당일 클립 뒤 후순위)
+        await cacheReelsInBackground()
     }
 
     private func buildReelVideo(
