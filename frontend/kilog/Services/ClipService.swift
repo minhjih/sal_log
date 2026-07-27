@@ -230,6 +230,15 @@ enum ClipService {
         return local
     }
 
+    /// 캐시된 파일이 손상/부분 다운로드일 때: 캐시와 signed URL을 버리고 새로 받는다.
+    static func redownloadVideo(for clip: Clip) async throws -> URL? {
+        guard let key = clip.videoKey else { return nil }
+        let local = cacheDir.appendingPathComponent("\(clip.id.uuidString).mp4")
+        try? FileManager.default.removeItem(at: local)
+        cacheLock.lock(); urlCache[key] = nil; cacheLock.unlock()
+        return try await cachedVideoURL(for: clip)
+    }
+
     // ── signed URL (재생용) — 만료 10분 전까지 캐시 ─────────
     private static var urlCache: [String: (url: URL, expiry: Date)] = [:]
     private static let cacheLock = NSLock()

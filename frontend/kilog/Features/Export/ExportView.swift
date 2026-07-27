@@ -98,6 +98,36 @@ struct ExportView: View {
         .onDisappear { player?.pause() }
     }
 
+    /// 클립의 재생 가능한 로컬 파일을 끝까지 확보한다.
+    /// 캐시(앱/디스크) → 없거나 손상 시 강제 재다운로드 순으로 시도하고,
+    /// 각 단계에서 실제로 비디오 트랙이 열리는지 검증한다.
+    private func playableURL(for clip: TaggedClip) async -> URL? {
+        if let cached = app.videoCache[clip.id], await hasVideoTrack(cached) {
+            return cached
+        }
+        if let cached = try? await ClipService.cachedVideoURL(for: clip.clip),
+           await hasVideoTrack(cached) {
+            return cached
+        }
+        // 캐시가 손상됐을 수 있으니 새로 발급받아 재다운로드
+        if let fresh = try? await ClipService.redownloadVideo(for: clip.clip),
+           await hasVideoTrack(fresh) {
+            return fresh
+        }
+        return nil
+    }
+
+    private func hasVideoTrack(_ url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard let tracks = try? await asset.loadTracks(withMediaType: .video),
+              let track = tracks.first else { return false }
+        // 자연 크기가 0이면(손상 파일) 재생 불가로 간주
+        if let size = try? await track.load(.naturalSize), size.width > 0, size.height > 0 {
+            return true
+        }
+        return false
+    }
+
     /// 요약 카드를 CGImage로 렌더 (아웃트로 배경색과 같은 배경을 깔아 불투명 렌더)
     private func renderCard<V: View>(_ view: V) -> CGImage? {
         let renderer = ImageRenderer(content: view.background(Theme.bg))
@@ -135,24 +165,25 @@ struct ExportView: View {
         player = nil
 
         do {
-            // 1) 영상 클립 준비 — 스플래시에서 받아둔 캐시를 우선 사용
+            // 1) 영상 클립 준비 — 재생 가능한 파일만 담되, 캐시가 손상됐으면 재다운로드.
+            //    (짧거나 비율이 달라서가 아니라, 캐시/다운로드가 불완전할 때 빠지던 것)
             var localFiles: [UUID: URL] = [:]
             var durations: [UUID: Double] = [:]
+            var dropped = 0
             for clip in clips {
                 guard clip.clip.videoKey != nil else { continue }
-                let local: URL?
-                if let cached = app.videoCache[clip.id] {
-                    local = cached
-                } else {
-                    local = try? await ClipService.cachedVideoURL(for: clip.clip)
+                guard let local = await playableURL(for: clip) else {
+                    dropped += 1
+                    continue
                 }
-                guard let local else { continue }
                 localFiles[clip.id] = local
-                let asset = AVURLAsset(url: local)
-                if let sec = try? await asset.load(.duration).seconds,
+                if let sec = try? await AVURLAsset(url: local).load(.duration).seconds,
                    sec.isFinite, sec > 0 {
                     durations[clip.id] = sec
                 }
+            }
+            if dropped > 0 {
+                print("[Export] \(dropped)개 클립을 불러오지 못해 제외됨")
             }
 
             // 2) 합성
