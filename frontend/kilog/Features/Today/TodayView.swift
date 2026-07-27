@@ -111,7 +111,7 @@ struct TodayView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("지난 브이로그").font(.system(size: 13, weight: .bold))
                     Spacer()
-                    Text("하루가 지나면 한 편으로 합쳐 보관해요")
+                    Text("하루가 지나면 한 편으로 합쳐 7일간 보관해요")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.faint)
                 }
