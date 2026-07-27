@@ -254,6 +254,10 @@ final class AppState: ObservableObject {
             }
             break   // 호출당 하루만
         }
+
+        // 서버는 DB 행만 지우므로, 남은 스토리지 파일(고아)은 여기서 정리한다.
+        await ClipService.cleanupOrphanClipFiles(groupId: group.id, userId: myId)
+        await ReelService.cleanupOrphanReelFiles(groupId: group.id)
     }
 
     private func buildReelVideo(

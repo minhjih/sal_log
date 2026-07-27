@@ -111,6 +111,22 @@ enum ReelService {
         return dir
     }
 
+    /// day_reels 행이 없는(만료·정리된) reels 스토리지 파일을 Storage API로 정리.
+    static func cleanupOrphanReelFiles(groupId: UUID) async {
+        let prefix = groupId.uuidString.lowercased()
+        guard let files = try? await Supa.client.storage.from("reels").list(path: prefix)
+        else { return }
+        let reels = (try? await fetchReels(groupId: groupId, limit: 100)) ?? []
+        let keep = Set(reels.compactMap(\.videoKey))
+        let orphans = files.compactMap { f -> String? in
+            let key = "\(prefix)/\(f.name)"
+            return keep.contains(key) ? nil : key
+        }
+        if !orphans.isEmpty {
+            _ = try? await Supa.client.storage.from("reels").remove(paths: orphans)
+        }
+    }
+
     static func cachedReelURL(_ reel: DayReel) async throws -> URL? {
         guard let key = reel.videoKey else { return nil }
         let local = cacheDir.appendingPathComponent("\(reel.id.uuidString).mp4")
