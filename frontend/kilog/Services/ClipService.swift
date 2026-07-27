@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import Supabase
 import PostgREST
 import Storage
@@ -217,6 +218,15 @@ enum ClipService {
         return dir
     }
 
+    /// 다운로드 전용 세션 — 응답이 멈추면 짧게 끊어 무한 대기를 막는다.
+    private static let downloadSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 20     // 데이터 정체 20초면 실패
+        cfg.timeoutIntervalForResource = 45     // 한 다운로드 총 45초 상한
+        cfg.waitsForConnectivity = false
+        return URLSession(configuration: cfg)
+    }()
+
     /// 클립 영상을 캐시 디렉터리에 내려받고 로컬 URL 반환. 이미 있으면 재사용.
     static func cachedVideoURL(for clip: Clip) async throws -> URL? {
         guard let key = clip.videoKey else { return nil }
@@ -224,10 +234,28 @@ enum ClipService {
         if FileManager.default.fileExists(atPath: local.path) { return local }
 
         let signed = try await signedVideoURL(for: key)
-        let (tmp, _) = try await URLSession.shared.download(from: signed)
+        let (tmp, _) = try await downloadSession.download(from: signed)
         try? FileManager.default.removeItem(at: local)
         try FileManager.default.moveItem(at: tmp, to: local)
         return local
+    }
+
+    /// 재생 가능한 로컬 파일을 확보 (캐시 → 재다운로드), 각 단계에서 비디오
+    /// 트랙이 실제로 열리는지 검증. nonisolated라 병렬 로딩에서 바로 쓸 수 있다.
+    static func resolvePlayable(clip: Clip, cached: URL?) async -> URL? {
+        if let cached, await hasVideoTrack(cached) { return cached }
+        if let url = try? await cachedVideoURL(for: clip), await hasVideoTrack(url) { return url }
+        if let url = try? await redownloadVideo(for: clip), await hasVideoTrack(url) { return url }
+        return nil
+    }
+
+    static func hasVideoTrack(_ url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard let tracks = try? await asset.loadTracks(withMediaType: .video),
+              let track = tracks.first,
+              let size = try? await track.load(.naturalSize),
+              size.width > 0, size.height > 0 else { return false }
+        return true
     }
 
     /// 서버는 DB 행만 지우므로(호스티드는 SQL로 storage 삭제 불가), 내 소유
